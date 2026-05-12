@@ -18,6 +18,8 @@ target_sources(app PRIVATE
     src/hal/dap_delay.c
     src/dap/DAP.c
     src/dap/SW_DP.c
+    src/usb/usbd_context.c
+    src/usb/hid_dap.c
 )
 
 # Suppress warnings for DAPLink core files

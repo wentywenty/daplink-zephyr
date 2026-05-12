@@ -1,0 +1,22 @@
+/*
+ * DAPLink Zephyr Board Overlay - nRF52840 Reference
+ */
+
+/ {
+	daplink: daplink {
+		compatible = "daplink,gpio";
+		swclk-gpios = <&gpio0 11 0>;
+		swdio-gpios = <&gpio0 12 0>;
+		nreset-gpios = <&gpio0 13 (GPIO_OPEN_DRAIN | GPIO_ACTIVE_LOW)>;
+	};
+};
+
+/ {
+	daplink_hid: hid_dev {
+		compatible = "zephyr,hid-device";
+		in-report-size = <64>;
+		in-polling-period-us = <1000>;
+		out-report-size = <64>;
+		out-polling-period-us = <1000>;
+	};
+};

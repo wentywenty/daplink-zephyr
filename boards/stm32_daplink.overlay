@@ -1,0 +1,34 @@
+/*
+ * DAPLink Zephyr Board Overlay - STM32 Reference
+ *
+ * Copy and modify this file for your specific board.
+ * Usage: west build -b <board> -- -DDTC_OVERLAY_FILE=boards/stm32_daplink.overlay
+ */
+
+/ {
+	daplink: daplink {
+		compatible = "daplink,gpio";
+
+		/* SWD clock pin - push-pull output */
+		swclk-gpios = <&gpioB 13 0>;
+
+		/* SWD data pin - bidirectional */
+		swdio-gpios = <&gpioB 14 0>;
+
+		/* Optional: separate SWDIO input pin */
+		/* swdio-in-gpios = <&gpioB 12 0>; */
+
+		/* Target reset pin - open drain with pull-up */
+		nreset-gpios = <&gpioB 0 (GPIO_OPEN_DRAIN | GPIO_ACTIVE_LOW)>;
+	};
+};
+
+/ {
+	daplink_hid: hid_dev {
+		compatible = "zephyr,hid-device";
+		in-report-size = <64>;
+		in-polling-period-us = <1000>;
+		out-report-size = <64>;
+		out-polling-period-us = <1000>;
+	};
+};
