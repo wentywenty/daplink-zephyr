@@ -11,7 +11,6 @@
 #include <zephyr/logging/log.h>
 
 #include "usbd_context.h"
-#include "hid_dap.h"
 
 LOG_MODULE_REGISTER(usbd_ctx, LOG_LEVEL_INF);
 

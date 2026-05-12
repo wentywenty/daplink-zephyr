@@ -18,7 +18,6 @@
 #include "hid_dap.h"
 #include "DAP_config.h"
 #include "DAP.h"
-#include "usbd_context.h"
 
 LOG_MODULE_REGISTER(hid_dap, LOG_LEVEL_INF);
 

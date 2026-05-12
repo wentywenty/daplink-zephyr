@@ -13,7 +13,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/arch/arch_interface.h>
-#include <string.h>
 
 #include "dap_gpio.h"
 #include "dap_delay.h"
