@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# DAPLink application Kconfig - extends Zephyr defaults
+#
+
+source "Kconfig.zephyr"
+
+config DAPLINK_MSC_FLASH
+	bool "Enable MSC drag-and-drop flash programming"
+	default y if DISK_ACCESS
+	help
+	  Enable virtual FAT16 disk for drag-and-drop firmware flashing.
+	  Requires ~32KB RAM for the in-memory disk image. Disable this
+	  option for resource-constrained targets (e.g. STM32F103C8T6).
+
+	  When enabled, you should also enable CONFIG_USBD_MSC_CLASS and
+	  CONFIG_DISK_ACCESS in your board configuration.

@@ -5,7 +5,7 @@
  *
  * Phase 1: HID debugging interface
  * Phase 2: CDC ACM serial bridge
- * Phase 3: MSC drag-and-drop flash programming
+ * Phase 3: MSC drag-and-drop flash programming (optional)
  */
 
 #include <zephyr/kernel.h>
@@ -16,7 +16,10 @@
 #include "DAP.h"
 #include "usbd_context.h"
 #include "hid_dap.h"
+
+#ifdef CONFIG_DAPLINK_MSC_FLASH
 #include "vfs_disk.h"
+#endif
 
 LOG_MODULE_REGISTER(daplink, LOG_LEVEL_INF);
 
@@ -39,12 +42,14 @@ int main(void)
 	DAP_Setup();
 	LOG_INF("CMSIS-DAP initialized");
 
+#ifdef CONFIG_DAPLINK_MSC_FLASH
 	/* Step 3: Initialize VFS disk (must be before USB) */
 	ret = vfs_disk_init();
 	if (ret != 0) {
 		LOG_ERR("VFS disk init failed: %d", ret);
 		return ret;
 	}
+#endif
 
 	/* Step 4: Initialize HID-DAP adapter */
 	ret = hid_dap_init();
@@ -62,6 +67,7 @@ int main(void)
 
 	/* Step 6: Enable USB */
 	struct usbd_context *usbd = daplink_usbd_ctx();
+
 	if (!usbd_can_detect_vbus(usbd)) {
 		ret = usbd_enable(usbd);
 		if (ret != 0) {
@@ -70,7 +76,11 @@ int main(void)
 		}
 	}
 
+#ifdef CONFIG_DAPLINK_MSC_FLASH
 	LOG_INF("DAPLink ready - HID + CDC + MSC active");
+#else
+	LOG_INF("DAPLink ready - HID + CDC active");
+#endif
 
 	while (true) {
 		k_sleep(K_MSEC(1000));

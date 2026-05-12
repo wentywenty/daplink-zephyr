@@ -6,7 +6,9 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/usb/usbd.h>
+#ifdef CONFIG_DAPLINK_MSC_FLASH
 #include <zephyr/usb/class/usbd_msc.h>
+#endif
 #include <zephyr/drivers/uart/uart_bridge.h>
 #include <zephyr/logging/log.h>
 
@@ -35,8 +37,10 @@ USBD_CONFIGURATION_DEFINE(daplink_fs_config,
 			  125,
 			  &fs_cfg_desc);
 
-/* MSC LUN: RAM disk "DAPLINK" */
+/* MSC LUN: RAM disk "DAPLINK" (only when drag-and-drop is enabled) */
+#ifdef CONFIG_DAPLINK_MSC_FLASH
 USBD_DEFINE_MSC_LUN(daplink, "DAPLINK", "ARM", "DAPLink", "1.00");
+#endif
 
 /* UART bridge device references for CDC line coding updates */
 #define DEVICE_DT_GET_COMMA(node_id) DEVICE_DT_GET(node_id),

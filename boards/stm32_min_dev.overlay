@@ -1,0 +1,40 @@
+/*
+ * DAPLink Zephyr - Blue Pill (STM32F103C8T6) Board Overlay
+ *
+ * Adds: HID debug + CDC ACM UART bridge
+ * No MSC (drag-and-drop) - resource constrained target.
+ * Board DTS already enables USB (zephyr_udc0) and USART2.
+ */
+
+/ {
+	/* SWD debug probe GPIO pins */
+	daplink: daplink {
+		compatible = "daplink,gpio";
+
+		swclk-gpios = <&gpiob 13 0>;
+		swdio-gpios = <&gpiob 14 0>;
+		nreset-gpios = <&gpiob 0 (GPIO_OPEN_DRAIN | GPIO_ACTIVE_LOW)>;
+	};
+
+	/* HID device for CMSIS-DAP */
+	hid_dev_0: hid_dev_0 {
+		compatible = "zephyr,hid-device";
+		in-report-size = <64>;
+		in-polling-period-us = <1000>;
+		out-report-size = <64>;
+		out-polling-period-us = <1000>;
+	};
+
+	/* UART bridge: CDC ACM <-> target USART2 (PA2/PA3) */
+	uart_bridge0 {
+		compatible = "zephyr,uart-bridge";
+		peers = <&cdc_acm_uart0 &usart2>;
+	};
+};
+
+/* CDC ACM UART instance (child of USB controller) */
+&usb {
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};

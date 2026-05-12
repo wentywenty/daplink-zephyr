@@ -16,6 +16,7 @@ target_include_directories(app PRIVATE
     src/flash
 )
 
+# Core sources (always compiled)
 target_sources(app PRIVATE
     src/main.c
     src/hal/dap_gpio.c
@@ -24,6 +25,11 @@ target_sources(app PRIVATE
     src/dap/SW_DP.c
     src/usb/usbd_context.c
     src/usb/hid_dap.c
+)
+
+# MSC drag-and-drop flash programming (optional, requires ~32KB RAM)
+if (CONFIG_DAPLINK_MSC_FLASH)
+target_sources(app PRIVATE
     src/flash/flash_blob.h
     src/flash/target_stm32f1.c
     src/flash/target_stm32f4.c
@@ -40,6 +46,7 @@ target_sources(app PRIVATE
     src/flash/flash_manager.c
     src/flash/vfs_disk.c
 )
+endif()
 
 # Suppress warnings for DAPLink core files
 set_source_files_properties(
