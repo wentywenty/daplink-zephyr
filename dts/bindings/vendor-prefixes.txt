@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# DAPLink application vendor prefix
+
+daplink	DAPLink debug probe
