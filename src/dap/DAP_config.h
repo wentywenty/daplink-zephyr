@@ -61,6 +61,18 @@ extern "C" {
 #define DAP_UART                 0
 #define DAP_UART_USB_COM_PORT    0
 
+/// Firmware version string.
+#define DAP_FW_VER               "v1.0.0"
+
+/// Timestamp clock (CPU_CLOCK for Cycle Counter).
+#define TIMESTAMP_CLOCK           CPU_CLOCK
+
+/// Timestamp get (use k_cycle_get_32 for approximate cycle counter).
+#define TIMESTAMP_GET()           k_cycle_get_32()
+
+/// SWO Streaming not available.
+#define SWO_STREAM                0
+
 //**************************************************************************************************
 /** SWD/JTAG Pin I/O */
 
@@ -190,6 +202,15 @@ __STATIC_FORCEINLINE void LED_CONNECTED_OUT(uint32_t bit) { (void)bit; }
 __STATIC_FORCEINLINE void LED_RUNNING_OUT(uint32_t bit) { (void)bit; }
 
 //**************************************************************************************************
+/** JTAG pin stubs (DAP_JTAG = 0, but SWJ_Sequence references some) */
+
+#define PIN_TDI_OUT(bit)   ((void)(bit))
+#define PIN_TDI_IN()       0
+#define PIN_TDO_IN()       0
+#define PIN_nTRST_OUT(bit) ((void)(bit))
+#define PIN_nTRST_IN()     0
+
+//**************************************************************************************************
 /** Delay functions */
 
 /// Millisecond delay - override DAP.c's version.
@@ -204,11 +225,6 @@ __STATIC_FORCEINLINE void LED_RUNNING_OUT(uint32_t bit) { (void)bit; }
 
 //**************************************************************************************************
 /** Clock and device setup */
-
-__STATIC_FORCEINLINE void Set_DAP_Clock_Delay(uint32_t clock_hz)
-{
-	dap_delay_calibrate(clock_hz);
-}
 
 __STATIC_FORCEINLINE void DAP_SETUP(void)
 {
