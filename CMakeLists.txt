@@ -27,6 +27,14 @@ target_sources(app PRIVATE
     src/flash/flash_blob.h
     src/flash/target_stm32f1.c
     src/flash/target_stm32f4.c
+    src/flash/target_stm32f0.c
+    src/flash/target_stm32f3.c
+    src/flash/target_stm32f7.c
+    src/flash/target_stm32l0.c
+    src/flash/target_stm32l4.c
+    src/flash/target_nrf52.c
+    src/flash/target_lpc1768.c
+    src/flash/target_detect.c
     src/flash/swd_host.c
     src/flash/intelhex.c
     src/flash/flash_manager.c

@@ -20,7 +20,7 @@
 #include "vfs_disk.h"
 #include "flash_manager.h"
 #include "intelhex.h"
-#include "target_stm32f4.h"
+#include "target_detect.h"
 
 #define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
 #include <zephyr/logging/log.h>
@@ -328,11 +328,18 @@ static void do_flash_program(void)
 	LOG_INF("Starting flash programming: %s (%u bytes)",
 		g_filename, g_file_size);
 
-	/* Determine target by trying STM32F4 first, then F1.
-	 * In a real implementation this would be configurable.
-	 * Default to STM32F4 for black_f407ve board.
-	 */
-	const target_cfg_t *target = &target_stm32f4;
+	/* Auto-detect connected target via SWD IDCODE */
+	const target_cfg_t *target = target_detect();
+
+	if (target == NULL) {
+		LOG_ERR("Target auto-detection failed - no supported MCU detected");
+		g_file_state = FILE_STATE_ERROR;
+		return;
+	}
+
+	LOG_INF("Target detected: %s %s",
+		target->target_vendor ? target->target_vendor : "",
+		target->target_part_number ? target->target_part_number : "");
 
 	/* Initialize flash manager */
 	int rc = flash_manager_init(target);
