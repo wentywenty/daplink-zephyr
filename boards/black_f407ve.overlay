@@ -1,7 +1,7 @@
 /*
  * DAPLink Zephyr - Black F407VE Board Overlay
  *
- * Adds: HID debug, CDC ACM UART bridge, MSC RAM disk
+ * Adds: HID debug, CDC ACM UART bridge, MSC (VFS drag-and-drop)
  * Board DTS already enables USB OTG FS (zephyr_udc0).
  */
 
@@ -24,18 +24,22 @@
 		out-polling-period-us = <1000>;
 	};
 
-	/* RAM disk for MSC (512 * 96 = 48KB) */
-	ramdisk0 {
-		compatible = "zephyr,ram-disk";
-		disk-name = "DAPLINK";
-		sector-size = <512>;
-		sector-count = <96>;
-	};
-
 	/* UART bridge: CDC ACM <-> target USART2 (PA2/PA3) */
 	uart_bridge0 {
 		compatible = "zephyr,uart-bridge";
 		peers = <&cdc_acm_uart0 &usart2>;
+	};
+
+	/*
+	 * Dummy RAM disk: ensures drivers__disk library has sources.
+	 * The actual MSC backend is the custom VFS driver (vfs_disk.c).
+	 * Uses disk-name "RAMDISK" (not "DAPLINK") to avoid conflicts.
+	 */
+	ramdisk_dummy {
+		compatible = "zephyr,ram-disk";
+		disk-name = "RAMDISK";
+		sector-size = <512>;
+		sector-count = <1>;
 	};
 };
 

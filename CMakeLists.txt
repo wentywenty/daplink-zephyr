@@ -13,6 +13,7 @@ target_include_directories(app PRIVATE
     src/dap
     src/usb
     src/hal
+    src/flash
 )
 
 target_sources(app PRIVATE
@@ -23,6 +24,13 @@ target_sources(app PRIVATE
     src/dap/SW_DP.c
     src/usb/usbd_context.c
     src/usb/hid_dap.c
+    src/flash/flash_blob.h
+    src/flash/target_stm32f1.c
+    src/flash/target_stm32f4.c
+    src/flash/swd_host.c
+    src/flash/intelhex.c
+    src/flash/flash_manager.c
+    src/flash/vfs_disk.c
 )
 
 # Suppress warnings for DAPLink core files
