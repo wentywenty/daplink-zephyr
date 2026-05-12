@@ -1,11 +1,13 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  *
- * DAPLink USB Device Context - Device descriptor and initialization
+ * DAPLink USB Device Context - Composite device (HID + CDC + MSC)
  */
 
 #include <zephyr/kernel.h>
 #include <zephyr/usb/usbd.h>
+#include <zephyr/usb/class/usbd_msc.h>
+#include <zephyr/drivers/uart/uart_bridge.h>
 #include <zephyr/logging/log.h>
 
 #include "usbd_context.h"
@@ -34,6 +36,16 @@ USBD_CONFIGURATION_DEFINE(daplink_fs_config,
 			  125,
 			  &fs_cfg_desc);
 
+/* MSC LUN: RAM disk "DAPLINK" */
+USBD_DEFINE_MSC_LUN(daplink, "DAPLINK", "ARM", "DAPLink", "1.00");
+
+/* UART bridge device references for CDC line coding updates */
+#define DEVICE_DT_GET_COMMA(node_id) DEVICE_DT_GET(node_id),
+
+static const struct device *uart_bridges[] = {
+	DT_FOREACH_STATUS_OKAY(zephyr_uart_bridge, DEVICE_DT_GET_COMMA)
+};
+
 static void usbd_msg_cb(struct usbd_context *const usbd_ctx,
 			const struct usbd_msg *const msg)
 {
@@ -41,6 +53,14 @@ static void usbd_msg_cb(struct usbd_context *const usbd_ctx,
 
 	if (msg->type == USBD_MSG_CONFIGURATION) {
 		LOG_INF("  Configuration value %d", msg->status);
+	}
+
+	/* Propagate CDC ACM line coding changes to UART bridge */
+	if (msg->type == USBD_MSG_CDC_ACM_LINE_CODING ||
+	    msg->type == USBD_MSG_CDC_ACM_CONTROL_LINE_STATE) {
+		for (uint8_t i = 0; i < ARRAY_SIZE(uart_bridges); i++) {
+			uart_bridge_settings_update(msg->dev, uart_bridges[i]);
+		}
 	}
 }
 
@@ -79,12 +99,14 @@ int daplink_usbd_init(void)
 		return err;
 	}
 
-	err = usbd_register_class(&daplink_usbd, "hid_dap", 1);
+	/* Auto-register all USB class instances (HID, CDC ACM, MSC) */
+	err = usbd_register_all_classes(&daplink_usbd, USBD_SPEED_FS, 1, NULL);
 	if (err) {
-		LOG_ERR("Failed to register HID DAP class (%d)", err);
+		LOG_ERR("Failed to register USB classes (%d)", err);
 		return err;
 	}
 
+	/* Composite device: use IAD class code */
 	usbd_device_set_code_triple(&daplink_usbd, USBD_SPEED_FS,
 				    USB_BCC_MISCELLANEOUS, 0x02, 0x01);
 
