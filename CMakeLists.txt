@@ -15,4 +15,5 @@ target_include_directories(app PRIVATE
 target_sources(app PRIVATE
     src/main.c
     src/hal/dap_gpio.c
+    src/hal/dap_delay.c
 )
