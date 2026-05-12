@@ -1,0 +1,37 @@
+/*
+ * DAPLink Zephyr - NUCLEO-F103RB Board Overlay
+ *
+ * Enables USB device controller and configures HID + SWD GPIO.
+ * Note: NUCLEO-F103RB does not expose target USB connector.
+ * This overlay is for build verification / firmware development.
+ */
+
+/* Enable USB device controller (PA11/PA12 fixed-function pins) */
+zephyr_udc0: &usb {
+	status = "okay";
+};
+
+/ {
+	/* DAPLink SWD GPIO pins */
+	daplink: daplink {
+		compatible = "daplink,gpio";
+
+		/* SWCLK - push-pull output (PB13) */
+		swclk-gpios = <&gpiob 13 0>;
+
+		/* SWDIO - bidirectional (PB14) */
+		swdio-gpios = <&gpiob 14 0>;
+
+		/* Target nRESET - open drain (PB0) */
+		nreset-gpios = <&gpiob 0 (GPIO_OPEN_DRAIN | GPIO_ACTIVE_LOW)>;
+	};
+
+	/* HID device node for DAP interface */
+	hid_dev_0: hid_dev_0 {
+		compatible = "zephyr,hid-device";
+		in-report-size = <64>;
+		in-polling-period-us = <1000>;
+		out-report-size = <64>;
+		out-polling-period-us = <1000>;
+	};
+};

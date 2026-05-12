@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# DAPLink GPIO binding - SWD/JTAG debug probe pins
+
+description: DAPLink SWD/JTAG debug probe GPIO pins
+
+compatible: "daplink,gpio"
+
+properties:
+  swclk-gpios:
+    type: phandle-array
+    required: true
+    description: SWCLK/TCK output pin
+
+  swdio-gpios:
+    type: phandle-array
+    required: true
+    description: SWDIO/TMS bidirectional data pin
+
+  swdio-in-gpios:
+    type: phandle-array
+    required: false
+    description: Optional separate SWDIO input pin
+
+  nreset-gpios:
+    type: phandle-array
+    required: false
+    description: Target nRESET pin (open-drain)

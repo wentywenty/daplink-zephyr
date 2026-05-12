@@ -12,7 +12,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/sys/arch_interface.h>
+#include <zephyr/arch/arch_interface.h>
 #include <string.h>
 
 #include "dap_gpio.h"
@@ -213,9 +213,8 @@ __STATIC_FORCEINLINE void LED_RUNNING_OUT(uint32_t bit) { (void)bit; }
 //**************************************************************************************************
 /** Delay functions */
 
-/// Millisecond delay - override DAP.c's version.
-#undef Delayms
-#define Delayms(delay) k_busy_wait((uint32_t)(delay) * 1000U)
+/// Millisecond delay - DAP.c has been modified to use k_busy_wait directly.
+/// No macro override needed since we modified the function body.
 
 /// Slow delay for SWJ operations.
 #define PIN_DELAY_SLOW(n) delay_ns((n) * 10U)

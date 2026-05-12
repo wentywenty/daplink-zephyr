@@ -16,6 +16,7 @@
 #include <zephyr/logging/log.h>
 
 #include "hid_dap.h"
+#include "DAP_config.h"
 #include "DAP.h"
 #include "usbd_context.h"
 

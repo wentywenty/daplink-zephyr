@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 #include <zephyr/kernel.h>
+#include <zephyr/arch/arch_interface.h>
 
 /**
  * Initialize delay subsystem.

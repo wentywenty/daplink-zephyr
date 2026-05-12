@@ -9,7 +9,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <zephyr/sys/arch_interface.h>
+#include <zephyr/arch/arch_interface.h>
 
 #ifndef __STATIC_FORCEINLINE
   #define __STATIC_FORCEINLINE static inline __attribute__((always_inline))
