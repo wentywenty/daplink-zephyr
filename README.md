@@ -2,7 +2,7 @@
 
 基于 Zephyr RTOS 的 CMSIS-DAP 调试探针，支持拖放烧写。
 
-将一块 STM32F407 开发板变为全功能调试器：通过 USB 同时提供 HID 调试接口、串口透传、拖放烧写磁盘。
+将一块 STM32 开发板变为全功能调试器：通过 USB 同时提供 HID 调试接口、串口透传、拖放烧写磁盘。资源受限板（如 Blue Pill）可关闭 MSC，仅保留 HID + CDC。
 
 ## 功能
 
@@ -10,7 +10,7 @@
 |------|------|------|
 | CMSIS-DAP v2 | USB HID | 兼容 Keil/OpenOCD/pyOCD |
 | 串口透传 | CDC ACM | 调试目标 UART 输出 |
-| 拖放烧写 | MSC | 拖入 .hex/.bin 自动烧写目标 |
+| 拖放烧写 | MSC | 拖入 .hex/.bin 自动烧写目标（可选，需 ~32KB RAM） |
 | 自动检测 | — | SWD IDCODE 识别目标芯片 |
 
 ## 支持的目标芯片
@@ -40,16 +40,24 @@ STM32F401/411/429 共用 F4 算法，DEV_ID 分别为 0x423/0x431/0x419。
 
 ### 调试探针板（运行本固件）
 
+**全功能配置（HID + CDC + MSC）：**
+
 - STM32F407 或兼容芯片
 - USB Full-Speed 接口
 - 至少 128 KB Flash、64 KB RAM
+
+**最小配置（HID + CDC，无 MSC）：**
+
+- STM32F103C8T6 (Blue Pill) 等资源受限芯片
+- USB Full-Speed 接口
+- 64 KB Flash、20 KB RAM
 
 ### 引脚连接
 
 调试探针通过 SWD 连接目标板：
 
 ```
-探针 (STM32F407)          目标板
+探针                      目标板
 ─────────────────        ──────────
 PB13 (SWCLK)  ─────────> SWCLK
 PB14 (SWDIO)  ─<───────> SWDIO
@@ -85,8 +93,11 @@ source zephyr-env.sh
 git clone <repo-url> daplink-zephyr
 cd daplink-zephyr
 
-# 编译 (black_f407ve 开发板)
+# 编译 (black_f407ve 开发板，全功能)
 west build -b black_f407ve --pristine
+
+# 编译 (Blue Pill，最小配置，无 MSC)
+west build -b stm32_min_dev --pristine
 
 # 或其他支持的开发板
 west build -b nucleo_f103rb --pristine
@@ -166,15 +177,18 @@ src/
 │   ├── target_nrf52.c  # Nordic nRF52 目标配置
 │   └── target_lpc1768.c # NXP LPC1768 目标配置
 boards/
-├── black_f407ve.overlay   # Black F407VE 开发板
-├── nucleo_f103rb.overlay  # NUCLEO-F103RB
-├── stm32_daplink.overlay  # 通用 STM32 DAPLink
-└── nrf52_daplink.overlay  # nRF52 DAPLink
+├── black_f407ve.conf       # Black F407VE 板级配置
+├── black_f407ve.overlay    # Black F407VE 设备树覆盖
+├── stm32_min_dev.conf      # Blue Pill 板级配置（禁用 MSC）
+├── stm32_min_dev.overlay   # Blue Pill 设备树覆盖
+├── nucleo_f103rb.overlay   # NUCLEO-F103RB
+├── stm32_daplink.overlay   # 通用 STM32 DAPLink
+└── nrf52_daplink.overlay   # nRF52 DAPLink
 ```
 
 ## 资源占用
 
-以 STM32F407VE (black_f407ve) 为目标编译：
+### 全功能配置（STM32F407VE / black_f407ve）
 
 | 资源 | 使用量 | 总量 | 占比 |
 |------|--------|------|------|
@@ -182,6 +196,15 @@ boards/
 | RAM | 61 KB | 128 KB | 46.6% |
 
 RAM 主要被 VFS 磁盘镜像占用（32 KB）。
+
+### 最小配置（STM32F103C8T6 / Blue Pill）
+
+| 资源 | 使用量 | 总量 | 占比 |
+|------|--------|------|------|
+| Flash | ~30 KB | 64 KB | ~47% |
+| RAM | ~12 KB | 20 KB | ~60% |
+
+关闭 MSC 拖放烧写和日志后，可在 64KB/20KB 的 Blue Pill 上运行 HID + CDC。
 
 ## 开发阶段
 
