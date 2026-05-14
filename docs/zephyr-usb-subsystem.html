@@ -1,0 +1,2256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zephyr RTOS USB 子系统 — 源码深度剖析</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f5f7fa;
+    --surface2: #eef1f6;
+    --border: #d8dce6;
+    --text: #1a1d27;
+    --text-dim: #6b7085;
+    --accent: #2563eb;
+    --accent2: #6d28d9;
+    --green: #059669;
+    --orange: #d97706;
+    --red: #dc2626;
+    --cyan: #0891b2;
+    --yellow: #b45309;
+    --code-bg: #f8f9fc;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 0;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #eef2ff 0%, #ffffff 50%, #eef2ff 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 0 40px;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 2.4em;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 12px;
+  }
+  .header .subtitle {
+    color: var(--text-dim);
+    font-size: 1.1em;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .header .version {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 4px 14px;
+    border-radius: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-size: 0.85em;
+    font-family: monospace;
+  }
+
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 32px;
+    margin: 32px auto;
+    max-width: 900px;
+  }
+  .toc h2 {
+    font-size: 1.2em;
+    color: var(--accent);
+    margin-bottom: 12px;
+    border: none;
+    padding: 0;
+  }
+  .toc ol { padding-left: 20px; }
+  .toc li { margin: 6px 0; }
+  .toc a {
+    color: var(--text);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); }
+
+  .content {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px 64px;
+  }
+
+  h2 {
+    font-size: 1.6em;
+    margin: 48px 0 20px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text);
+  }
+  h2 .num {
+    color: var(--accent);
+    font-weight: 300;
+    margin-right: 8px;
+  }
+
+  h3 {
+    font-size: 1.2em;
+    margin: 32px 0 12px;
+    color: var(--accent);
+  }
+
+  h4 {
+    font-size: 1.05em;
+    margin: 20px 0 8px;
+    color: var(--text);
+  }
+
+  p { margin: 10px 0; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: 14px 0;
+    font-size: 0.88em;
+    line-height: 1.6;
+  }
+  code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  }
+  :not(pre) > code {
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--cyan);
+  }
+
+  .kw { color: var(--accent2); font-weight: 600; }
+  .fn { color: var(--green); }
+  .str { color: var(--orange); }
+  .cm { color: var(--text-dim); font-style: italic; }
+  .type { color: var(--cyan); }
+  .num { color: var(--yellow); }
+  .macro { color: var(--red); font-weight: 600; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.95em;
+  }
+  th {
+    background: var(--surface2);
+    color: var(--accent);
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:hover td { background: rgba(37, 99, 235, 0.05); }
+
+  .diagram {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+  .diagram pre {
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    font-size: 0.88em;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  .callout {
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    border-left: 4px solid;
+  }
+  .callout.info {
+    background: rgba(37, 99, 235, 0.06);
+    border-color: var(--accent);
+  }
+  .callout.warn {
+    background: rgba(217, 119, 6, 0.06);
+    border-color: var(--orange);
+  }
+  .callout.tip {
+    background: rgba(5, 150, 105, 0.06);
+    border-color: var(--green);
+  }
+  .callout strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.95em;
+  }
+  .callout.info strong { color: var(--accent); }
+  .callout.warn strong { color: var(--orange); }
+  .callout.tip strong { color: var(--green); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    font-weight: 600;
+  }
+  .badge.blue { background: rgba(37,99,235,0.12); color: var(--accent); }
+  .badge.green { background: rgba(5,150,105,0.12); color: var(--green); }
+  .badge.orange { background: rgba(217,119,6,0.12); color: var(--orange); }
+  .badge.red { background: rgba(220,38,38,0.12); color: var(--red); }
+  .badge.purple { background: rgba(109,40,217,0.12); color: var(--accent2); }
+
+  ul, ol { padding-left: 24px; margin: 8px 0; }
+  li { margin: 4px 0; }
+
+  h2[id]::before {
+    content: '';
+    display: block;
+    height: 80px;
+    margin-top: -80px;
+    visibility: hidden;
+  }
+
+  .footer {
+    text-align: center;
+    padding: 32px 0;
+    color: var(--text-dim);
+    font-size: 0.85em;
+    border-top: 1px solid var(--border);
+  }
+
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .flow-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.9em;
+    font-family: monospace;
+  }
+  .flow-arrow {
+    color: var(--green);
+    font-size: 1.2em;
+  }
+
+  .file-tag {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 8px;
+    font-size: 0.82em;
+    font-family: monospace;
+    color: var(--accent);
+    margin-left: 4px;
+  }
+
+  .lineno {
+    color: var(--text-dim);
+    font-size: 0.85em;
+    user-select: none;
+    min-width: 3em;
+    display: inline-block;
+    text-align: right;
+    margin-right: 12px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<div class="header">
+  <h1>Zephyr RTOS USB 子系统 — 源码深度剖析</h1>
+  <p class="subtitle">基于 <code>zephyr/subsys/usb/device_next/</code> 源码的逐文件深度分析，涵盖核心线程模型、USB Chapter 9 协议引擎、类驱动框架、端点管理等关键子系统</p>
+  <span class="version">Zephyr 4.x | device_next | ~5000 行核心代码</span>
+</div>
+
+<!-- ==================== TOC ==================== -->
+<div class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#s01">源码目录结构</a></li>
+    <li><a href="#s02">核心线程模型 (usbd_core.c)</a></li>
+    <li><a href="#s03">设备生命周期状态机 (usbd_device.c)</a></li>
+    <li><a href="#s04">USB Chapter 9 协议引擎 (usbd_ch9.c)</a></li>
+    <li><a href="#s05">端点管理 (usbd_endpoint.c + usbd_init.c)</a></li>
+    <li><a href="#s06">配置管理 (usbd_config.c)</a></li>
+    <li><a href="#s07">类驱动框架 (usbd_class.c)</a></li>
+    <li><a href="#s08">描述符管理 (usbd_desc.c)</a></li>
+    <li><a href="#s09">消息通知系统 (usbd_msg.c)</a></li>
+    <li><a href="#s10">HID 类实现 (usbd_hid.c)</a></li>
+    <li><a href="#s11">DAPLink 实战分析</a></li>
+    <li><a href="#s12">Kconfig 与设备树</a></li>
+    <li><a href="#s13">架构总结与设计模式</a></li>
+  </ol>
+</div>
+
+<!-- ==================== CONTENT ==================== -->
+<div class="content">
+
+<!-- ============================================================ -->
+<!-- 01 源码目录结构 -->
+<!-- ============================================================ -->
+<h2 id="s01"><span class="num">01</span>源码目录结构</h2>
+
+<p><code>zephyr/subsys/usb/device_next/</code> 是新版 USB 设备栈的核心实现目录，总计约 <strong>4911 行</strong> 核心代码（不含类驱动）。下面列出所有文件及其职责：</p>
+
+<h3>核心文件 <span class="badge blue">Core</span></h3>
+<table>
+  <thead>
+    <tr><th>文件</th><th>行数</th><th>职责描述</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>usbd_core.c</code></td>
+      <td><span class="badge purple">307</span></td>
+      <td>事件循环线程：创建协作式线程 "usbd"，通过 <code>k_msgq</code> 接收 UDC 事件并分发处理</td>
+    </tr>
+    <tr>
+      <td><code>usbd_device.c</code></td>
+      <td><span class="badge purple">482</span></td>
+      <td>设备生命周期管理：<code>usbd_init()</code>、<code>usbd_enable()</code>、<code>usbd_disable()</code>、<code>usbd_shutdown()</code></td>
+    </tr>
+    <tr>
+      <td><code>usbd_ch9.c</code></td>
+      <td><span class="badge red">1306</span></td>
+      <td>USB Chapter 9 协议引擎：控制传输状态机、标准请求处理、描述符组装 <strong>(最大文件)</strong></td>
+    </tr>
+    <tr>
+      <td><code>usbd_init.c</code></td>
+      <td><span class="badge purple">315</span></td>
+      <td>端点地址分配与初始化：遍历类描述符链，分配接口号和端点地址</td>
+    </tr>
+    <tr>
+      <td><code>usbd_config.c</code></td>
+      <td><span class="badge purple">343</span></td>
+      <td>USB 配置管理：添加/设置/重置配置，配置属性设置</td>
+    </tr>
+    <tr>
+      <td><code>usbd_class.c</code></td>
+      <td><span class="badge purple">503</span></td>
+      <td>类驱动注册框架：类实例查找（按接口/端点/请求）、注册/注销</td>
+    </tr>
+    <tr>
+      <td><code>usbd_endpoint.c</code></td>
+      <td><span class="badge purple">203</span></td>
+      <td>端点操作：enable/disable/enqueue、halt 管理、ZLP 处理</td>
+    </tr>
+    <tr>
+      <td><code>usbd_interface.c</code></td>
+      <td><span class="badge purple">215</span></td>
+      <td>接口 alternate setting 管理：端点的 UP/DOWN/TEST 操作</td>
+    </tr>
+    <tr>
+      <td><code>usbd_desc.c</code></td>
+      <td><span class="badge purple">223</span></td>
+      <td>描述符管理：字符串/BOS 描述符添加、索引自动分配</td>
+    </tr>
+    <tr>
+      <td><code>usbd_msg.c</code></td>
+      <td><span class="badge purple">142</span></td>
+      <td>消息通知：应用回调注册、延迟工作队列模式</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>类驱动文件 <span class="badge green">Class</span></h3>
+<table>
+  <thead>
+    <tr><th>文件</th><th>USB 类</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>class/usbd_hid.c</code></td><td>HID (872 行)</td><td>人机接口设备：键盘、鼠标、自定义设备 (如 CMSIS-DAP)</td></tr>
+    <tr><td><code>class/usbd_cdc_acm.c</code></td><td>CDC ACM</td><td>虚拟串口：用于 UART 桥接</td></tr>
+    <tr><td><code>class/usbd_msc.c</code></td><td>MSC</td><td>大容量存储：U 盘功能、拖拽烧录</td></tr>
+    <tr><td><code>class/usbd_cdc_ecm.c</code></td><td>CDC ECM</td><td>以太网控制模型：网络通信</td></tr>
+    <tr><td><code>class/usbd_cdc_ncm.c</code></td><td>CDC NCM</td><td>网络控制模型：高速网络</td></tr>
+    <tr><td><code>class/bt_hci.c</code></td><td>BT HCI</td><td>蓝牙 HCI USB 传输</td></tr>
+    <tr><td><code>class/usbd_uac2.c</code></td><td>UAC2</td><td>USB Audio Class 2.0</td></tr>
+    <tr><td><code>class/usbd_uvc.c</code></td><td>UVC</td><td>USB Video Class</td></tr>
+    <tr><td><code>class/usbd_dfu.c</code></td><td>DFU</td><td>设备固件升级</td></tr>
+    <tr><td><code>class/loopback.c</code></td><td>Loopback</td><td>测试用环回类</td></tr>
+  </tbody>
+</table>
+
+<div class="callout info">
+  <strong>文件依赖关系</strong>
+  <p>核心文件之间的调用关系：<code>usbd_core.c</code> 是入口点，通过 <code>SYS_INIT</code> 创建线程；线程内调用 <code>usbd_ch9.c</code> 处理控制传输，<code>usbd_class.c</code> 分发数据传输给类驱动。初始化路径：<code>usbd_device.c</code> → <code>usbd_init.c</code>（端点分配） → <code>usbd_config.c</code>（配置构建）。</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- 02 核心线程模型 -->
+<!-- ============================================================ -->
+<h2 id="s02"><span class="num">02</span>核心线程模型 <span class="file-tag">usbd_core.c</span></h2>
+
+<p><code>usbd_core.c</code> 是整个 USB 设备栈的事件调度中枢。它在系统启动时通过 <code>SYS_INIT</code> 创建一个协作式线程，以消息队列驱动的事件循环方式处理所有 USB 事件。</p>
+
+<h3>线程创建与初始化</h3>
+<p>在 <code>POST_KERNEL</code> 阶段，<code>usbd_pre_init()</code> 函数被调用，完成以下关键工作：</p>
+
+<pre>
+<span class="cm">/* usbd_core.c:284-307 */</span>
+<span class="kw">static int</span> <span class="fn">usbd_pre_init</span>(<span class="kw">void</span>)
+{
+    <span class="fn">k_thread_create</span>(&amp;usbd_thread_data, usbd_stack,
+            K_KERNEL_STACK_SIZEOF(usbd_stack),
+            <span class="fn">usbd_thread</span>,
+            NULL, NULL, NULL,
+            <span class="macro">K_PRIO_COOP(8)</span>, <span class="num">0</span>, K_NO_WAIT);
+
+    <span class="fn">k_thread_name_set</span>(&amp;usbd_thread_data, <span class="str">"usbd"</span>);
+
+    <span class="cm">/* 遍历可迭代段中的所有类节点，重置状态 */</span>
+    <span class="macro">STRUCT_SECTION_FOREACH_ALTERNATE</span>(usbd_class_fs, usbd_class_node, c_nd) {
+        <span class="fn">atomic_set</span>(&amp;c_nd-&gt;state, <span class="num">0</span>);
+    }
+    <span class="macro">STRUCT_SECTION_FOREACH_ALTERNATE</span>(usbd_class_hs, usbd_class_node, c_nd) {
+        <span class="fn">atomic_set</span>(&amp;c_nd-&gt;state, <span class="num">0</span>);
+    }
+    <span class="kw">return</span> <span class="num">0</span>;
+}
+<span class="macro">SYS_INIT</span>(usbd_pre_init, POST_KERNEL, CONFIG_USBD_THREAD_INIT_PRIO);
+</pre>
+
+<div class="callout info">
+  <strong>协作式线程优先级 K_PRIO_COOP(8)</strong>
+  <p>USB 设备栈使用协作式线程（优先级数字越小越高），优先级 8 确保它高于大多数应用线程但低于关键的系统和中断处理。线程不会在处理事件时被抢占，保证了 USB 事件处理的原子性。</p>
+</div>
+
+<h3>事件队列定义</h3>
+<pre>
+<span class="cm">/* usbd_core.c:31-32 */</span>
+<span class="macro">K_MSGQ_DEFINE</span>(usbd_msgq, <span class="kw">sizeof</span>(<span class="kw">struct</span> <span class="type">udc_event</span>),
+        CONFIG_USBD_MAX_UDC_MSG, <span class="kw">sizeof</span>(uint32_t));
+</pre>
+
+<p>消息队列 <code>usbd_msgq</code> 是 UDC 驱动与 USB 设备栈之间的唯一通信通道。队列中每个元素是一个 <code>struct udc_event</code>，最大容量由 <code>CONFIG_USBD_MAX_UDC_MSG</code> 决定。</p>
+
+<h3>事件载体回调</h3>
+<p><code>usbd_event_carrier()</code> 是注册到 UDC 驱动层的回调函数。每当 UDC 驱动产生事件（ISR 上下文），该函数被调用：</p>
+
+<pre>
+<span class="cm">/* usbd_core.c:34-51 */</span>
+<span class="kw">static int</span> <span class="fn">usbd_event_carrier</span>(<span class="kw">const struct</span> <span class="type">device</span> *dev,
+                <span class="kw">const struct</span> <span class="type">udc_event</span> *<span class="kw">const</span> event)
+{
+    <span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx = (<span class="kw">void</span> *)<span class="fn">udc_get_event_ctx</span>(dev);
+    k_spinlock_key_t key;
+
+    <span class="kw">if</span> (event-&gt;type == <span class="macro">UDC_EVT_EP_REQUEST</span>) {
+        <span class="cm">/* 将已完成的传输请求添加到 slist，
+         * 以确保它们不会丢失 */</span>
+        key = <span class="fn">k_spin_lock</span>(&amp;uds_ctx-&gt;ep_event_lock);
+        <span class="fn">sys_slist_append</span>(&amp;uds_ctx-&gt;ep_events, &amp;event-&gt;buf-&gt;node);
+        <span class="fn">k_spin_unlock</span>(&amp;uds_ctx-&gt;ep_event_lock, key);
+    }
+
+    <span class="kw">return</span> <span class="fn">k_msgq_put</span>(&amp;usbd_msgq, event, K_NO_WAIT);
+}
+</pre>
+
+<div class="callout warn">
+  <strong>双队列设计</strong>
+  <p>对于 <code>EP_REQUEST</code> 事件（传输完成），数据缓冲区除了放入主消息队列外，还额外加入 <code>ep_events</code> 单链表。这个 slist 由自旋锁 <code>ep_event_lock</code> 保护，确保 ISR 上下文下的安全操作。这一设计允许在处理其他事件类型时也能检查是否有待处理的传输完成事件。</p>
+</div>
+
+<h3>事件处理主循环</h3>
+<pre>
+<span class="cm">/* usbd_core.c:209-226 */</span>
+<span class="kw">static void</span> <span class="fn">usbd_thread</span>(<span class="kw">void</span> *p1, <span class="kw">void</span> *p2, <span class="kw">void</span> *p3)
+{
+    <span class="kw">struct</span> <span class="type">usbd_context</span> *uds_ctx;
+    <span class="kw">struct</span> <span class="type">udc_event</span> event;
+
+    <span class="kw">while</span> (<span class="num">true</span>) {
+        <span class="fn">k_msgq_get</span>(&amp;usbd_msgq, &amp;event, K_FOREVER);
+
+        uds_ctx = (<span class="kw">void</span> *)<span class="fn">udc_get_event_ctx</span>(event.dev);
+        __ASSERT(uds_ctx != NULL &amp;&amp; <span class="fn">usbd_is_initialized</span>(uds_ctx),
+             <span class="str">"USB device is not initialized"</span>);
+        <span class="fn">usbd_event_handler</span>(uds_ctx, &amp;event);
+    }
+}
+</pre>
+
+<h3>事件分发流程</h3>
+<p><code>usbd_event_handler()</code> 是事件分发中心（usbd_core.c:155-207），其处理逻辑：</p>
+
+<ol>
+  <li><strong>首先</strong>调用 <code>event_handler_ep_request()</code> 检查 <code>ep_events</code> 链表，处理所有已完成的传输请求</li>
+  <li>如果当前事件本身就是 <code>EP_REQUEST</code>，则直接返回（已在步骤 1 处理）</li>
+  <li>根据事件类型分发：
+    <ul>
+      <li><code>VBUS_READY/REMOVED</code> → 发布简单消息给应用回调</li>
+      <li><code>SUSPEND/RESUME</code> → 更新挂起状态 → 广播给所有类 → 发布消息</li>
+      <li><code>SOF</code> → 广播给所有类（用于 HID 空闲速率等定时功能）</li>
+      <li><code>RESET</code> → 总线重置处理 → 发布消息</li>
+      <li><code>ERROR</code> → 发布错误消息</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>总线重置处理</h3>
+<p><code>event_handler_bus_reset()</code>（usbd_core.c:119-152）在每次 USB 总线重置时执行：</p>
+
+<pre>
+<span class="cm">/* 关键步骤 */</span>
+<span class="fn">usbd_status_suspended</span>(uds_ctx, <span class="num">false</span>);        <span class="cm">// 清除挂起状态</span>
+<span class="fn">udc_set_address</span>(uds_ctx-&gt;dev, <span class="num">0</span>);             <span class="cm">// 地址归零</span>
+<span class="fn">usbd_config_set</span>(uds_ctx, <span class="num">0</span>);                  <span class="cm">// 解除当前配置</span>
+
+<span class="cm">// 检测实际总线速度</span>
+udc_speed = <span class="fn">udc_device_speed</span>(uds_ctx-&gt;dev);
+<span class="kw">switch</span> (udc_speed) {
+<span class="kw">case</span> <span class="macro">UDC_BUS_SPEED_HS</span>:
+    uds_ctx-&gt;status.speed = <span class="macro">USBD_SPEED_HS</span>;
+    <span class="kw">break</span>;
+<span class="kw">default</span>:
+    uds_ctx-&gt;status.speed = <span class="macro">USBD_SPEED_FS</span>;
+}
+
+uds_ctx-&gt;ch9_data.state = <span class="macro">USBD_STATE_DEFAULT</span>; <span class="cm">// 进入 DEFAULT 状态</span>
+uds_ctx-&gt;status.rwup = <span class="num">false</span>;                  <span class="cm">// 清除远程唤醒标志</span>
+</pre>
+
+<h3>类事件广播</h3>
+<p><code>usbd_class_bcast_event()</code>（usbd_core.c:86-117）仅在设备处于 CONFIGURED 状态时工作，遍历当前配置的 <code>class_list</code> 链表，根据事件类型调用对应的类回调：</p>
+
+<table>
+  <thead>
+    <tr><th>事件类型</th><th>类回调函数</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>UDC_EVT_SUSPEND</code></td><td><code>usbd_class_suspended()</code></td></tr>
+    <tr><td><code>UDC_EVT_RESUME</code></td><td><code>usbd_class_resumed()</code></td></tr>
+    <tr><td><code>UDC_EVT_SOF</code></td><td><code>usbd_class_sof()</code></td></tr>
+  </tbody>
+</table>
+
+<h3>线程架构图</h3>
+<div class="diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────────────┐
+│                        UDC Driver ISR                               │
+│                   (硬件中断上下文)                                    │
+└──────────────┬──────────────────────────────────────────────────────┘
+               │ udc_event (struct udc_event)
+               ▼
+     ┌─────────────────────────────┐
+     │   usbd_event_carrier()      │ ← UDC 回调，ISR 上下文
+     │                             │
+     │  if EP_REQUEST:             │
+     │    spin_lock → slist_append │ → ep_events slist (spinlock 保护)
+     │    spin_unlock              │
+     │                             │
+     │  k_msgq_put(usbd_msgq)      │ → 主消息队列
+     └─────────────┬───────────────┘
+                   │
+    ┌──────────────▼──────────────────────────────────────────┐
+    │               k_msgq (usbd_msgq)                         │
+    │   [event_1] [event_2] [event_3] ...                     │
+    │   容量: CONFIG_USBD_MAX_UDC_MSG                         │
+    └──────────────┬──────────────────────────────────────────┘
+                   │ k_msgq_get(K_FOREVER)
+                   ▼
+    ┌──────────────────────────────────────────────────────────┐
+    │           usbd_thread (协作式, K_PRIO_COOP(8))            │
+    │                  名称: "usbd"                             │
+    │                                                           │
+    │  while (true) {                                           │
+    │    k_msgq_get → usbd_event_handler()                     │
+    │  }                                                        │
+    │                                                           │
+    │  ┌─── usbd_event_handler() ───────────────────────────┐  │
+    │  │                                                     │  │
+    │  │  1. event_handler_ep_request()  ←── 总是先执行      │  │
+    │  │     ├── spin_lock(ep_events slist)                  │  │
+    │  │     ├── 取出所有已完成的 net_buf                     │  │
+    │  │     ├── ep==0 → usbd_handle_ctrl_xfer()  控制传输   │  │
+    │  │     └── ep!=0 → usbd_class_handle_xfer() 数据传输   │  │
+    │  │                                                     │  │
+    │  │  2. 总线事件分发:                                    │  │
+    │  │     ├── VBUS_READY/REMOVED → usbd_msg_pub_simple()  │  │
+    │  │     ├── RESET → event_handler_bus_reset()           │  │
+    │  │     │         ├── udc_set_address(0)                │  │
+    │  │     │         ├── usbd_config_set(0)                │  │
+    │  │     │         ├── 检测 HS/FS 速度                   │  │
+    │  │     │         └── state = USBD_STATE_DEFAULT        │  │
+    │  │     ├── SUSPEND/RESUME → class_bcast_event()        │  │
+    │  │     │         └── 遍历 class_list 通知每个类        │  │
+    │  │     ├── SOF → class_bcast_event()                   │  │
+    │  │     └── ERROR → usbd_msg_pub_simple()               │  │
+    │  │                                                     │  │
+    │  │  3. 所有事件 → usbd_msg_pub() → 应用回调            │  │
+    │  └─────────────────────────────────────────────────────┘  │
+    └──────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<!-- ============================================================ -->
+<!-- 03 设备生命周期状态机 -->
+<!-- ============================================================ -->
+<h2 id="s03"><span class="num">03</span>设备生命周期状态机 <span class="file-tag">usbd_device.c</span></h2>
+
+<p><code>usbd_device.c</code>（482 行）管理 USB 设备的完整生命周期，提供四个核心 API：<code>usbd_init()</code>、<code>usbd_enable()</code>、<code>usbd_disable()</code>、<code>usbd_shutdown()</code>。</p>
+
+<h3>usbd_init() — 初始化</h3>
+<pre>
+<span class="cm">/* usbd_device.c:228-269 */</span>
+<span class="kw">int</span> <span class="fn">usbd_init</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx)
+{
+    <span class="kw">int</span> ret;
+
+    <span class="cm">/* 锁定调度器，确保上下文在完全初始化前不被抢占 */</span>
+    <span class="fn">k_sched_lock</span>();
+    <span class="fn">usbd_device_lock</span>(uds_ctx);  <span class="cm">// mutex lock</span>
+
+    <span class="kw">if</span> (uds_ctx-&gt;dev == NULL) {
+        ret = -ENODEV;
+        <span class="kw">goto</span> init_exit;
+    }
+
+    <span class="kw">if</span> (<span class="fn">usbd_is_initialized</span>(uds_ctx)) {
+        ret = -EALREADY;
+        <span class="kw">goto</span> init_exit;
+    }
+
+    <span class="kw">if</span> (!<span class="fn">device_is_ready</span>(uds_ctx-&gt;dev)) {
+        ret = -ENODEV;
+        <span class="kw">goto</span> init_exit;
+    }
+
+    ret = <span class="fn">usbd_device_init_core</span>(uds_ctx);  <span class="cm">// udc_init + usbd_init_configurations</span>
+
+    <span class="fn">memset</span>(&amp;uds_ctx-&gt;ch9_data, <span class="num">0</span>, <span class="kw">sizeof</span>(<span class="kw">struct</span> <span class="type">usbd_ch9_data</span>));
+    uds_ctx-&gt;status.initialized = <span class="num">true</span>;
+
+init_exit:
+    <span class="fn">usbd_device_unlock</span>(uds_ctx);
+    <span class="fn">k_sched_unlock</span>();
+    <span class="kw">return</span> ret;
+}
+</pre>
+
+<p><code>usbd_device_init_core()</code>（usbd_core.c:228-247）执行两个关键操作：</p>
+<ol>
+  <li>调用 <code>udc_init()</code> 初始化底层控制器驱动，注册 <code>usbd_event_carrier</code> 回调</li>
+  <li>调用 <code>usbd_init_configurations()</code> 为所有配置分配端点地址和接口号</li>
+</ol>
+
+<h3>usbd_enable() — 使能设备</h3>
+<pre>
+<span class="cm">/* usbd_device.c:302-355 关键路径 */</span>
+<span class="kw">int</span> <span class="fn">usbd_enable</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx)
+{
+    <span class="cm">/* 检查 EP0 队列是否为空（disable/enable 循环中复用） */</span>
+    ep0_empty = <span class="fn">udc_ep_queue_is_empty</span>(uds_ctx-&gt;dev, USB_CONTROL_EP_OUT);
+
+    ret = <span class="fn">udc_enable</span>(uds_ctx-&gt;dev);
+
+    <span class="cm">/* 预分配 SETUP 缓冲区 */</span>
+    ret = <span class="fn">usbd_preallocate</span>(uds_ctx);
+
+    <span class="cm">/* 初始化控制管道（仅当 EP0 为空时才入队 SETUP buffer） */</span>
+    ret = <span class="fn">usbd_init_control_pipe</span>(uds_ctx, ep0_empty);
+
+    uds_ctx-&gt;status.enabled = <span class="num">true</span>;
+}
+</pre>
+
+<h3>SETUP 缓冲区预分配策略</h3>
+<p><code>usbd_preallocate()</code>（usbd_device.c:271-291）是关键的设计决策：</p>
+
+<pre>
+<span class="cm">/* usbd_device.c:271-291 */</span>
+<span class="kw">static int</span> <span class="fn">usbd_preallocate</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx)
+{
+    <span class="cm">/* SETUP buffer 分配不能失败。USB 栈在每次控制传输后
+     * 有效重用同一个缓冲区。这确保了 SETUP 阶段始终可以
+     * 接收，无论 UDC 内存使用情况如何。
+     *
+     * 预分配发生在 usbd_enable() 中，因为 bMaxPacketSize0
+     * 必须在分配时已知。缓冲区保持到 usbd_shutdown()，
+     * 不会在 udc_disable()/udc_enable() 循环中重新分配。
+     */</span>
+    <span class="kw">if</span> (uds_ctx-&gt;setup_buf == NULL) {
+        uds_ctx-&gt;setup_buf = <span class="fn">udc_ctrl_setup_alloc</span>(uds_ctx-&gt;dev);
+    }
+    <span class="kw">if</span> (uds_ctx-&gt;setup_buf == NULL) {
+        <span class="kw">return</span> -ENOMEM;
+    }
+    <span class="kw">return</span> <span class="num">0</span>;
+}
+</pre>
+
+<div class="callout tip">
+  <strong>SETUP 缓冲区生命周期</strong>
+  <p>缓冲区在 <code>usbd_enable()</code> 中分配，在 <code>usbd_shutdown()</code> 中释放。中间的 <code>usbd_disable()</code>/<code>usbd_enable()</code> 循环不会释放它。每次控制传输完成后，通过 <code>net_buf_ref()</code> + <code>net_buf_reset()</code> 复用同一缓冲区。</p>
+</div>
+
+<h3>usbd_disable() / usbd_shutdown()</h3>
+<p><code>usbd_disable()</code>：将配置重置为 0，禁用 UDC，设置 <code>enabled=false</code>。</p>
+<p><code>usbd_shutdown()</code>：调用 <code>usbd_device_shutdown_core()</code> 移除所有类、描述符、vendor request；调用 <code>udc_purge_queues()</code> 清空端点队列；释放预分配的 SETUP 缓冲区；设置 <code>initialized=false</code>。</p>
+
+<h3>设备状态机图</h3>
+<div class="diagram">
+<pre>
+                    ┌─────────────────┐
+                    │   UNINITIALIZED  │
+                    │  (初始状态)       │
+                    └────────┬────────┘
+                             │
+                    usbd_init()
+                    ├── k_sched_lock()
+                    ├── udc_init()
+                    ├── usbd_init_configurations()
+                    │   ├── 分配接口号和端点地址
+                    │   ├── 更新 wTotalLength / bNumInterfaces
+                    │   └── 快照 ep_assigned，重置 ep_active
+                    └── initialized = true
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │   INITIALIZED    │
+                    │  (锁定配置)       │
+                    │  不可修改配置     │
+                    └────────┬────────┘
+                             │
+                    usbd_enable()
+                    ├── udc_enable()
+                    ├── usbd_preallocate() → SETUP buf
+                    ├── usbd_init_control_pipe()
+                    │   └── enqueue SETUP buf
+                    │   └── state = DEFAULT
+                    └── enabled = true
+                             │
+                             ▼
+                    ┌─────────────────┐
+              ┌────│     ENABLED       │────┐
+              │    │  (主机可枚举)      │    │
+              │    │  USB ch9 状态机   │    │
+              │    └─────────────────┘    │
+              │                           │
+      usbd_disable()              usbd_shutdown()
+      ├── usbd_config_set(0)      ├── usbd_device_shutdown_core()
+      ├── udc_disable()           │   ├── 移除所有 classes
+      └── enabled=false           │   ├── 移除所有 descriptors
+              │                   │   └── udc_shutdown()
+              │                   ├── udc_purge_queues()
+              │                   ├── 释放 SETUP buf
+              │                   └── initialized=false
+              │                           │
+              ▼                           ▼
+      ┌─────────────────┐        ┌─────────────────┐
+      │   INITIALIZED    │        │   UNINITIALIZED  │
+      │  (可重新 enable)  │        │  (完全清理)       │
+      └─────────────────┘        └─────────────────┘
+</pre>
+</div>
+
+<!-- ============================================================ -->
+<!-- 04 USB Chapter 9 协议引擎 -->
+<!-- ============================================================ -->
+<h2 id="s04"><span class="num">04</span>USB Chapter 9 协议引擎 <span class="file-tag">usbd_ch9.c</span> <span class="badge red">1306 行</span></h2>
+
+<p><code>usbd_ch9.c</code> 是整个 USB 设备栈中最大的文件，实现了完整的 USB 2.0 Chapter 9 协议。它管理控制传输的完整生命周期：SETUP → DATA IN/OUT → STATUS IN/OUT。</p>
+
+<h3>控制传输核心函数</h3>
+<p><code>usbd_handle_ctrl_xfer()</code>（usbd_ch9.c:1124-1288）是控制管道事件处理的总入口：</p>
+
+<pre>
+<span class="kw">int</span> <span class="fn">usbd_handle_ctrl_xfer</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx,
+              <span class="kw">struct</span> <span class="type">net_buf</span> *<span class="kw">const</span> buf, <span class="kw">int</span> err)
+{
+    <span class="kw">struct</span> <span class="type">udc_buf_info</span> *bi = <span class="fn">udc_get_buf_info</span>(buf);
+
+    <span class="cm">/* 1. 错误处理：释放 buffer，重新入队 SETUP */</span>
+    <span class="kw">if</span> (err) {
+        <span class="fn">net_buf_unref</span>(buf);
+        <span class="kw">if</span> (bi-&gt;setup || (bi-&gt;data &amp;&amp; bi-&gt;ep == USB_CONTROL_EP_OUT))
+            <span class="kw">return</span> <span class="fn">usbd_enqueue_setup</span>(uds_ctx);
+        <span class="kw">return</span> <span class="num">0</span>;
+    }
+
+    <span class="cm">/* 2. Data IN 完成：释放 buffer */</span>
+    <span class="kw">if</span> (bi-&gt;data &amp;&amp; bi-&gt;ep == USB_CONTROL_EP_IN) {
+        <span class="fn">net_buf_unref</span>(buf);
+        <span class="kw">return</span> <span class="num">0</span>;
+    }
+
+    <span class="cm">/* 3. SETUP / Data OUT 处理 */</span>
+    <span class="kw">if</span> ((bi-&gt;setup || bi-&gt;data) &amp;&amp; bi-&gt;ep == USB_CONTROL_EP_OUT) {
+        <span class="kw">if</span> (bi-&gt;setup) {
+            <span class="fn">ctrl_xfer_get_setup</span>(uds_ctx, buf); <span class="cm">// 解析 SETUP 包</span>
+            <span class="cm">// ... 根据方向分配 Data IN/OUT buffer</span>
+        }
+
+        ret = <span class="fn">handle_setup_request</span>(uds_ctx, next_buf); <span class="cm">// 分发请求</span>
+
+        <span class="kw">if</span> (errno) <span class="kw">goto</span> ctrl_xfer_stall; <span class="cm">// 协议错误 → STALL</span>
+
+        <span class="cm">// 成功：入队响应（Status IN 或 Data IN）</span>
+        <span class="kw">if</span> (setup-&gt;wLength == <span class="num">0</span>)
+            ret = <span class="fn">usbd_enqueue_status_in</span>(uds_ctx);
+        <span class="kw">else if</span> (<span class="fn">reqtype_is_to_device</span>(setup))
+            ret = <span class="fn">usbd_enqueue_status_in</span>(uds_ctx);
+        <span class="kw">else</span>
+            <span class="cm">// Data IN + Status OUT</span>
+            <span class="fn">usbd_enqueue_status_out</span>(uds_ctx);
+
+        <span class="kw">return</span> <span class="fn">usbd_enqueue_setup</span>(uds_ctx); <span class="cm">// 重新入队 SETUP buffer</span>
+    }
+
+    <span class="cm">/* 4. Status OUT 完成 */</span>
+    <span class="kw">if</span> (bi-&gt;status &amp;&amp; bi-&gt;ep == USB_CONTROL_EP_OUT) { ... }
+
+    <span class="cm">/* 5. Status IN 完成：执行 post_status 操作 */</span>
+    <span class="kw">if</span> (bi-&gt;status &amp;&amp; bi-&gt;ep == USB_CONTROL_EP_IN) {
+        <span class="kw">if</span> (uds_ctx-&gt;ch9_data.post_status)
+            ret = <span class="fn">post_status_stage</span>(uds_ctx); <span class="cm">// SET_ADDRESS / TEST_MODE</span>
+    }
+
+ctrl_xfer_stall:
+    <span class="cm">// STALL 对应方向的端点，重新入队 SETUP</span>
+    <span class="fn">udc_ep_set_halt</span>(...);
+    <span class="kw">return</span> <span class="fn">usbd_enqueue_setup</span>(uds_ctx);
+}
+</pre>
+
+<h3>SETUP 包解析</h3>
+<p><code>ctrl_xfer_get_setup()</code>（usbd_ch9.c:1043-1059）提取并字节交换 SETUP 包的字段：</p>
+
+<pre>
+<span class="kw">static int</span> <span class="fn">ctrl_xfer_get_setup</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx,
+                  <span class="kw">struct</span> <span class="type">net_buf</span> *<span class="kw">const</span> buf)
+{
+    <span class="kw">struct</span> <span class="type">usb_setup_packet</span> *setup = <span class="fn">usbd_get_setup_pkt</span>(uds_ctx);
+
+    <span class="kw">if</span> (buf-&gt;len != <span class="kw">sizeof</span>(<span class="kw">struct</span> <span class="type">usb_setup_packet</span>))
+        <span class="kw">return</span> -EINVAL;
+
+    <span class="fn">memcpy</span>(setup, buf-&gt;data, <span class="kw">sizeof</span>(<span class="kw">struct</span> <span class="type">usb_setup_packet</span>));
+
+    <span class="cm">// 字节交换为 CPU 字节序</span>
+    setup-&gt;wValue  = <span class="fn">sys_le16_to_cpu</span>(setup-&gt;wValue);
+    setup-&gt;wIndex  = <span class="fn">sys_le16_to_cpu</span>(setup-&gt;wIndex);
+    setup-&gt;wLength = <span class="fn">sys_le16_to_cpu</span>(setup-&gt;wLength);
+
+    <span class="kw">return</span> <span class="num">0</span>;
+}
+</pre>
+
+<h3>请求分发</h3>
+<p><code>handle_setup_request()</code>（usbd_ch9.c:1003-1041）根据 <code>bmRequestType.type</code> 分为三类：</p>
+
+<pre>
+<span class="kw">static int</span> <span class="fn">handle_setup_request</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx,
+                <span class="kw">struct</span> <span class="type">net_buf</span> *<span class="kw">const</span> buf)
+{
+    <span class="kw">switch</span> (setup-&gt;RequestType.type) {
+    <span class="kw">case</span> <span class="macro">USB_REQTYPE_TYPE_STANDARD</span>:
+        <span class="kw">if</span> (<span class="fn">reqtype_is_to_device</span>(setup))
+            ret = <span class="fn">std_request_to_device</span>(uds_ctx, buf);
+        <span class="kw">else</span>
+            ret = <span class="fn">std_request_to_host</span>(uds_ctx, buf);
+        <span class="kw">break</span>;
+    <span class="kw">case</span> <span class="macro">USB_REQTYPE_TYPE_CLASS</span>:
+    <span class="kw">case</span> <span class="macro">USB_REQTYPE_TYPE_VENDOR</span>:
+        ret = <span class="fn">nonstd_request</span>(uds_ctx, buf);
+        <span class="kw">break</span>;
+    }
+}
+</pre>
+
+<h3>标准请求处理 (To Device)</h3>
+<p><code>std_request_to_device()</code>（usbd_ch9.c:352-381）处理以下请求：</p>
+
+<table>
+  <thead>
+    <tr><th>请求</th><th>处理函数</th><th>关键行为</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>SET_ADDRESS</code></td>
+      <td><code>sreq_set_address()</code></td>
+      <td>支持 <code>addr_before_status</code> quirk；状态转换 DEFAULT/ADDRESS</td>
+    </tr>
+    <tr>
+      <td><code>SET_CONFIGURATION</code></td>
+      <td><code>sreq_set_configuration()</code></td>
+      <td>调用 <code>usbd_config_set()</code>；状态转换 ADDRESS/CONFIGURED</td>
+    </tr>
+    <tr>
+      <td><code>SET_INTERFACE</code></td>
+      <td><code>sreq_set_interface()</code></td>
+      <td>Alternate setting 切换</td>
+    </tr>
+    <tr>
+      <td><code>CLEAR_FEATURE</code></td>
+      <td><code>sreq_clear_feature()</code></td>
+      <td>远程唤醒、端点 STALL 清除</td>
+    </tr>
+    <tr>
+      <td><code>SET_FEATURE</code></td>
+      <td><code>sreq_set_feature()</code></td>
+      <td>远程唤醒、端点 STALL、测试模式</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>SET_ADDRESS 详细分析</h4>
+<p><code>sreq_set_address()</code>（usbd_ch9.c:70-111）处理 USB 地址设置，具有控制器 quirks 兼容性：</p>
+
+<pre>
+<span class="kw">static int</span> <span class="fn">sreq_set_address</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx)
+{
+    <span class="cm">/* 参数校验：地址不能超过 127 */</span>
+    <span class="kw">if</span> (setup-&gt;wValue > <span class="num">127</span> || setup-&gt;wIndex || setup-&gt;wLength)
+        <span class="kw">return</span> errno = -ENOTSUP, <span class="num">0</span>;
+
+    <span class="kw">if</span> (<span class="fn">usbd_state_is_configured</span>(uds_ctx))
+        <span class="kw">return</span> errno = -EPERM, <span class="num">0</span>;
+
+    <span class="kw">if</span> (caps.addr_before_status) {
+        <span class="cm">/* 某些控制器要求在 STATUS 阶段之前设置地址 */</span>
+        ret = <span class="fn">udc_set_address</span>(uds_ctx-&gt;dev, setup-&gt;wValue);
+    } <span class="kw">else</span> {
+        <span class="cm">/* 标准行为：在 STATUS 阶段之后设置地址 */</span>
+        uds_ctx-&gt;ch9_data.post_status = <span class="num">true</span>;
+    }
+
+    <span class="cm">/* 状态转换 */</span>
+    <span class="kw">if</span> (<span class="fn">usbd_state_is_address</span>(uds_ctx) &amp;&amp; setup-&gt;wValue == <span class="num">0</span>)
+        uds_ctx-&gt;ch9_data.state = <span class="macro">USBD_STATE_DEFAULT</span>;
+    <span class="kw">else</span>
+        uds_ctx-&gt;ch9_data.state = <span class="macro">USBD_STATE_ADDRESS</span>;
+}
+</pre>
+
+<h3>标准请求处理 (To Host)</h3>
+<p><code>std_request_to_host()</code>（usbd_ch9.c:908-934）处理数据方向为主机读取的请求：</p>
+
+<table>
+  <thead>
+    <tr><th>请求</th><th>处理函数</th><th>返回数据</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>GET_STATUS</code></td><td><code>sreq_get_status()</code></td><td>自供电、远程唤醒、端点 halt 状态</td></tr>
+    <tr><td><code>GET_DESCRIPTOR</code></td><td><code>sreq_get_descriptor()</code></td><td>设备/配置/字符串/BOS/限定符描述符</td></tr>
+    <tr><td><code>GET_CONFIGURATION</code></td><td><code>sreq_get_configuration()</code></td><td>当前配置值 (1 字节)</td></tr>
+    <tr><td><code>GET_INTERFACE</code></td><td><code>sreq_get_interface()</code></td><td>当前 alternate setting (1 字节)</td></tr>
+  </tbody>
+</table>
+
+<h3>配置描述符组装</h3>
+<p><code>sreq_get_desc_cfg()</code>（usbd_ch9.c:445-520）是描述符组装的核心。它将配置描述符与所有已注册类驱动的描述符拼接在一起：</p>
+
+<pre>
+<span class="cm">/* usbd_ch9.c:496-511 关键部分 */</span>
+<span class="cm">/* 先添加配置描述符本身 */</span>
+<span class="fn">net_buf_add_mem</span>(buf, cfg_desc, MIN(net_buf_tailroom(buf), cfg_desc-&gt;bLength));
+
+<span class="cm">/* 遍历 class_list，拼接每个类的描述符链 */</span>
+<span class="macro">SYS_SLIST_FOR_EACH_CONTAINER</span>(&amp;cfg_nd-&gt;class_list, c_nd, node) {
+    <span class="kw">struct</span> <span class="type">usb_desc_header</span> **dhp;
+    dhp = <span class="fn">usbd_class_get_desc</span>(c_nd-&gt;c_data, get_desc_speed);
+    <span class="kw">if</span> (dhp == NULL) <span class="kw">continue</span>;
+
+    <span class="kw">while</span> (*dhp != NULL &amp;&amp; (*dhp)-&gt;bLength != <span class="num">0</span>) {
+        len = MIN(net_buf_tailroom(buf), (*dhp)-&gt;bLength);
+        <span class="fn">net_buf_add_mem</span>(buf, *dhp, len);
+        dhp++;
+    }
+}
+
+<span class="cm">/* 截断到 wLength */</span>
+<span class="kw">if</span> (buf-&gt;len &gt; setup-&gt;wLength)
+    <span class="fn">net_buf_remove_mem</span>(buf, buf-&gt;len - setup-&gt;wLength);
+</pre>
+
+<h3>字符串描述符：ASCII7 → UTF16-LE 转换</h3>
+<p><code>string_ascii7_to_utf16le()</code>（usbd_ch9.c:552-598）将内部存储的 ASCII7 字符串转换为 USB 标准要求的 UTF-16LE 格式。对于序列号，还支持通过 <code>hwinfo_get_device_id()</code> 从硬件信息自动生成。</p>
+
+<h3>非标准请求分发</h3>
+<p><code>nonstd_request()</code>（usbd_ch9.c:969-1001）处理类和厂商请求：</p>
+
+<pre>
+<span class="kw">static int</span> <span class="fn">nonstd_request</span>(...)
+{
+    <span class="kw">switch</span> (setup-&gt;RequestType.recipient) {
+    <span class="kw">case</span> <span class="macro">USB_REQTYPE_RECIPIENT_ENDPOINT</span>:
+        c_nd = <span class="fn">usbd_class_get_by_ep</span>(uds_ctx, setup-&gt;wIndex);
+        <span class="kw">break</span>;
+    <span class="kw">case</span> <span class="macro">USB_REQTYPE_RECIPIENT_INTERFACE</span>:
+        c_nd = <span class="fn">usbd_class_get_by_iface</span>(uds_ctx, setup-&gt;wIndex);
+        <span class="kw">break</span>;
+    <span class="kw">case</span> <span class="macro">USB_REQTYPE_RECIPIENT_DEVICE</span>:
+        c_nd = <span class="fn">usbd_class_get_by_req</span>(uds_ctx, setup-&gt;bRequest);
+        <span class="kw">break</span>;
+    }
+
+    <span class="kw">if</span> (c_nd != NULL) {
+        <span class="cm">// 类特定请求</span>
+        <span class="kw">if</span> (<span class="fn">reqtype_is_to_device</span>(setup))
+            ret = <span class="fn">usbd_class_control_to_dev</span>(c_nd-&gt;c_data, setup, dbuf);
+        <span class="kw">else</span>
+            ret = <span class="fn">usbd_class_control_to_host</span>(c_nd-&gt;c_data, setup, dbuf);
+    } <span class="kw">else</span> {
+        <span class="cm">// 厂商请求</span>
+        <span class="kw">return</span> <span class="fn">vendor_device_request</span>(uds_ctx, dbuf);
+    }
+}
+</pre>
+
+<h3>控制传输流程图</h3>
+<div class="diagram">
+<pre>
+SETUP packet 接收完成 (ep0 OUT)
+    │
+    ▼
+ctrl_xfer_get_setup()
+    ├── memcpy 到 setup_pkt
+    ├── sys_le16_to_cpu(wValue/wIndex/wLength)
+    └── 参数校验
+    │
+    ▼
+handle_setup_request()
+    │
+    ├── USB_REQTYPE_TYPE_STANDARD
+    │   ├── to_device → std_request_to_device()
+    │   │   ├── SET_ADDRESS → sreq_set_address()
+    │   │   │   ├── addr_before_status quirk?
+    │   │   │   │   ├── Yes → udc_set_address() 立即
+    │   │   │   │   └── No  → post_status = true (延迟到 Status IN)
+    │   │   │   └── state: DEFAULT ↔ ADDRESS
+    │   │   ├── SET_CONFIGURATION → sreq_set_configuration()
+    │   │   │   ├── usbd_config_set(wValue)
+    │   │   │   └── state: ADDRESS ↔ CONFIGURED
+    │   │   ├── SET_INTERFACE → usbd_interface_set()
+    │   │   ├── SET_FEATURE → remote wakeup / endpoint halt / test mode
+    │   │   └── CLEAR_FEATURE → 清除对应特性
+    │   │
+    │   └── to_host → std_request_to_host()
+    │       ├── GET_STATUS → self_powered | rwup | ep_halt
+    │       ├── GET_DESCRIPTOR → 分发到具体描述符处理
+    │       │   ├── DEVICE → sreq_get_desc_dev()
+    │       │   ├── CONFIGURATION → sreq_get_desc_cfg()
+    │       │   │   └── 遍历 class_list 拼接所有类描述符
+    │       │   ├── STRING → sreq_get_desc_str()
+    │       │   │   └── ASCII7 → UTF16-LE 转换
+    │       │   ├── BOS → sreq_get_desc_bos()
+    │       │   └── DEVICE_QUALIFIER → sreq_get_dev_qualifier()
+    │       ├── GET_CONFIGURATION → 当前 cfg value
+    │       └── GET_INTERFACE → 当前 alternate setting
+    │
+    ├── USB_REQTYPE_TYPE_CLASS
+    │   └── nonstd_request()
+    │       ├── 按 endpoint 查找 → usbd_class_get_by_ep()
+    │       ├── 按 interface 查找 → usbd_class_get_by_iface()
+    │       ├── 按 request 查找 → usbd_class_get_by_req()
+    │       └── 调用类的 control_to_dev/host()
+    │
+    └── USB_REQTYPE_TYPE_VENDOR
+        └── vendor_device_request()
+            ├── 查找已注册的 vreq
+            └── 调用 vreq->to_dev/to_host()
+    │
+    ├── 成功 → 入队响应
+    │   ├── wLength==0 → usbd_enqueue_status_in()
+    │   ├── to_device → status_in
+    │   └── to_host → data_in + status_out
+    │
+    └── 协议错误 → STALL endpoint
+        ├── to_host → STALL EP IN
+        ├── to_device (wLength>0) → STALL EP IN/OUT
+        └── to_device (wLength==0) → STALL EP IN
+        └── 重新入队 SETUP buffer
+</pre>
+</div>
+
+<!-- ============================================================ -->
+<!-- 05 端点管理 -->
+<!-- ============================================================ -->
+<h2 id="s05"><span class="num">05</span>端点管理 <span class="file-tag">usbd_endpoint.c + usbd_init.c</span></h2>
+
+<h3>端点操作 (usbd_endpoint.c)</h3>
+<p><code>usbd_endpoint.c</code>（203 行）提供端点的底层操作封装：</p>
+
+<h4>usbd_ep_enable / usbd_ep_disable</h4>
+<p>这两个函数是 UDC API 的薄封装，维护 <code>ep_bm</code> 位图来跟踪端点启用状态：</p>
+
+<pre>
+<span class="cm">/* usbd_endpoint.c:20-33 */</span>
+<span class="kw">int</span> <span class="fn">usbd_ep_enable</span>(<span class="kw">const struct</span> <span class="type">device</span> *dev,
+           <span class="kw">const struct</span> <span class="type">usb_ep_descriptor</span> *<span class="kw">const</span> ed,
+           uint32_t *<span class="kw">const</span> ep_bm)
+{
+    ret = <span class="fn">udc_ep_enable</span>(dev, ed-&gt;bEndpointAddress, ed-&gt;bmAttributes,
+            sys_le16_to_cpu(ed-&gt;wMaxPacketSize), ed-&gt;bInterval);
+    <span class="kw">if</span> (ret == <span class="num">0</span>)
+        <span class="fn">usbd_ep_bm_set</span>(ep_bm, ed-&gt;bEndpointAddress);
+    <span class="kw">return</span> ret;
+}
+</pre>
+
+<h4>usbd_ep_enqueue</h4>
+<p><code>usbd_ep_enqueue()</code> 设置 buffer 的 owner 为类数据指针，并检查挂起状态：</p>
+
+<pre>
+<span class="cm">/* usbd_endpoint.c:139-154 */</span>
+<span class="kw">int</span> <span class="fn">usbd_ep_enqueue</span>(<span class="kw">const struct</span> <span class="type">usbd_class_data</span> *<span class="kw">const</span> c_data,
+            <span class="kw">struct</span> <span class="type">net_buf</span> *<span class="kw">const</span> buf)
+{
+    <span class="kw">struct</span> <span class="type">udc_buf_info</span> *bi = <span class="fn">udc_get_buf_info</span>(buf);
+
+    <span class="kw">if</span> (USB_EP_DIR_IS_IN(bi-&gt;ep)) {
+        <span class="kw">if</span> (<span class="fn">usbd_is_suspended</span>(uds_ctx))
+            <span class="kw">return</span> -EPERM; <span class="cm">// 挂起时不能 IN 传输</span>
+    }
+
+    bi-&gt;owner = (<span class="kw">void</span> *)c_data; <span class="cm">// 记录归属，用于传输完成时查找类</span>
+    <span class="kw">return</span> <span class="fn">udc_ep_enqueue</span>(uds_ctx-&gt;dev, buf);
+}
+</pre>
+
+<h4>ZLP (Zero Length Packet) 处理</h4>
+<p><code>usbd_ep_ctrl_set_zlp()</code>（usbd_endpoint.c:58-96）在控制传输中自动添加 ZLP：</p>
+
+<pre>
+<span class="cm">/* 当响应长度是 wMaxPacketSize 的整数倍且主机请求更多数据时，
+ * 需要发送 ZLP 来表示传输结束 */</span>
+<span class="kw">if</span> (setup-&gt;wLength &gt; min_len &amp;&amp; !(min_len % mps0)) {
+    <span class="fn">udc_ep_buf_set_zlp</span>(buf);
+}
+</pre>
+
+<h4>Halt 管理</h4>
+<p>端点的 STALL 状态通过 <code>ch9_data.ep_halt</code> 位图跟踪。SET_FEATURE(ENDPOINT_HALT) 设置 halt 位并调用 <code>udc_ep_set_halt()</code>，CLEAR_FEATURE 清除。</p>
+
+<h3>端点地址分配 (usbd_init.c)</h3>
+<p><code>usbd_init.c</code>（315 行）负责在初始化时为所有类驱动分配接口号和端点地址。</p>
+
+<h4>assign_ep_addr() — 端点地址分配</h4>
+<pre>
+<span class="cm">/* usbd_init.c:23-62 */</span>
+<span class="kw">static int</span> <span class="fn">assign_ep_addr</span>(<span class="kw">const struct</span> <span class="type">device</span> *dev,
+              <span class="kw">struct</span> <span class="type">usb_ep_descriptor</span> *<span class="kw">const</span> ed,
+              uint32_t *<span class="kw">const</span> config_ep_bm,
+              uint32_t *<span class="kw">const</span> class_ep_bm)
+{
+    <span class="kw">for</span> (<span class="kw">unsigned int</span> idx = <span class="num">1</span>; idx &lt; <span class="num">16U</span>; idx++) {
+        uint8_t ep = USB_EP_DIR_IS_IN(ed-&gt;bEndpointAddress) ?
+                     USB_EP_DIR_IN | idx : idx;
+
+        <span class="cm">// 跳过已分配的端点</span>
+        <span class="kw">if</span> (<span class="fn">usbd_ep_bm_is_set</span>(config_ep_bm, ep) ||
+            <span class="fn">usbd_ep_bm_is_set</span>(class_ep_bm, ep))
+            <span class="kw">continue</span>;
+
+        <span class="cm">// 尝试让 UDC 驱动验证此端点配置</span>
+        ret = <span class="fn">udc_ep_try_config</span>(dev, ep, ed-&gt;bmAttributes, &amp;mps, ed-&gt;bInterval);
+
+        <span class="kw">if</span> (ret == <span class="num">0</span>) {
+            ed-&gt;bEndpointAddress = ep;  <span class="cm">// 更新描述符中的端点地址</span>
+            ed-&gt;wMaxPacketSize = sys_cpu_to_le16(mps);
+            <span class="fn">usbd_ep_bm_set</span>(class_ep_bm, ep);
+            <span class="fn">usbd_ep_bm_set</span>(config_ep_bm, ep);
+            <span class="kw">return</span> <span class="num">0</span>;
+        }
+    }
+    <span class="kw">return</span> -ENODEV;
+}
+</pre>
+
+<h4>init_configuration_inst() — 类实例初始化</h4>
+<p>这是端点分配的核心函数，遍历类描述符链中的所有接口和端点描述符：</p>
+
+<pre>
+<span class="cm">/* usbd_init.c:111-198 关键逻辑 */</span>
+<span class="kw">static int</span> <span class="fn">init_configuration_inst</span>(...)
+{
+    <span class="cm">// 遍历描述符链</span>
+    <span class="kw">while</span> (*dhp != NULL &amp;&amp; (*dhp)-&gt;bLength != <span class="num">0</span>) {
+        <span class="kw">if</span> ((*dhp)-&gt;bDescriptorType == <span class="macro">USB_DESC_INTERFACE_ASSOC</span>) {
+            iad-&gt;bFirstInterface = tmp_nif;  <span class="cm">// IAD 指向下一个接口</span>
+        }
+
+        <span class="kw">if</span> ((*dhp)-&gt;bDescriptorType == <span class="macro">USB_DESC_INTERFACE</span>) {
+            <span class="kw">if</span> (ifd-&gt;bAlternateSetting == <span class="num">0</span>) {
+                ifd-&gt;bInterfaceNumber = tmp_nif;
+                c_nd-&gt;iface_bm |= BIT(tmp_nif); <span class="cm">// 标记接口归属</span>
+                tmp_nif++;
+            } <span class="kw">else</span> {
+                ifd-&gt;bInterfaceNumber = tmp_nif - <span class="num">1</span>;
+                <span class="cm">// Alternate: 解分配上一个 alternate 的端点</span>
+                <span class="fn">unassign_eps</span>(uds_ctx, config_ep_bm, &amp;class_ep_bm);
+            }
+        }
+
+        <span class="kw">if</span> ((*dhp)-&gt;bDescriptorType == <span class="macro">USB_DESC_ENDPOINT</span>) {
+            ret = <span class="fn">assign_ep_addr</span>(uds_ctx-&gt;dev, ed, config_ep_bm, &amp;class_ep_bm);
+        }
+
+        dhp++;
+    }
+
+    <span class="cm">// 快照到 ep_assigned</span>
+    c_nd-&gt;ep_active |= class_ep_bm;
+}
+</pre>
+
+<h4>bMaxPacketSize0 设置</h4>
+<p><code>usbd_init_update_fs_mps0()</code>（usbd_init.c:257-276）从 UDC 控制器能力中获取 EP0 最大包长：</p>
+
+<pre>
+<span class="kw">switch</span> (caps.mps0) {
+<span class="kw">case</span> <span class="macro">UDC_MPS0_8</span>:  desc-&gt;bMaxPacketSize0 = <span class="num">8</span>;  <span class="kw">break</span>;
+<span class="kw">case</span> <span class="macro">UDC_MPS0_16</span>: desc-&gt;bMaxPacketSize0 = <span class="num">16</span>; <span class="kw">break</span>;
+<span class="kw">case</span> <span class="macro">UDC_MPS0_32</span>: desc-&gt;bMaxPacketSize0 = <span class="num">32</span>; <span class="kw">break</span>;
+<span class="kw">case</span> <span class="macro">UDC_MPS0_64</span>: desc-&gt;bMaxPacketSize0 = <span class="num">64</span>; <span class="kw">break</span>;
+}
+</pre>
+
+<h3>端点分配流程图</h3>
+<div class="diagram">
+<pre>
+usbd_init_configurations()
+    │
+    ├── usbd_init_update_fs_mps0()    设置 EP0 最大包长
+    │
+    ├── [HS 配置] init_configuration(HS, cfg_nd)
+    │
+    └── [FS 配置] init_configuration(FS, cfg_nd)
+        │
+        ▼
+    init_configuration()
+        │
+        ├── 遍历 class_list 中每个类
+        │   │
+        │   ▼
+        │   init_configuration_inst()
+        │   │
+        │   ├── 获取类描述符链 (usb_desc_header**)
+        │   │
+        │   ├── 遍历描述符:
+        │   │   ├── IAD → 设置 bFirstInterface
+        │   │   ├── Interface (alt=0) → 分配 bInterfaceNumber
+        │   │   │   └── iface_bm |= BIT(nif), nif++
+        │   │   ├── Interface (alt!=0) → 关联到前一个接口号
+        │   │   │   └── unassign_eps() 回收上一个 alt 的端点
+        │   │   └── Endpoint → assign_ep_addr()
+        │   │       └── idx 1~15, udc_ep_try_config(), 更新描述符
+        │   │
+        │   └── usbd_class_init()  初始化类实例
+        │
+        ├── 更新 cfg_desc:
+        │   ├── wTotalLength = sizeof(cfg_desc) + sum(class_desc_len)
+        │   └── bNumInterfaces = nif
+        │
+        └── 快照与清理:
+            ├── c_nd->ep_assigned = c_nd->ep_active
+            └── unassign_eps() 重置 ep_active
+
+示例结果:
+  类 A (HID):  iface=0, ep_active={0x81, 0x01}
+  类 B (CDC):  iface=1,2, ep_active={0x82, 0x02, 0x83, 0x03}
+
+  配置描述符:
+  wTotalLength = 9 + classA_desc_len + classB_desc_len
+  bNumInterfaces = 3 (HID=0, CDC_ACM=1, CDC_DATA=2)
+</pre>
+</div>
+
+<!-- ============================================================ -->
+<!-- 06 配置管理 -->
+<!-- ============================================================ -->
+<h2 id="s06"><span class="num">06</span>配置管理 <span class="file-tag">usbd_config.c</span></h2>
+
+<p><code>usbd_config.c</code>（343 行）管理 USB 配置的添加、切换和重置。</p>
+
+<h3>添加配置 — usbd_add_configuration()</h3>
+<p>（usbd_config.c:252-343）执行以下校验和操作：</p>
+
+<ol>
+  <li>设备不能已初始化（<code>usbd_is_initialized()</code> 检查）</li>
+  <li>HS 配置需要控制器和栈同时支持高速</li>
+  <li>校验远程唤醒能力（<code>caps.rwup</code>）</li>
+  <li>自动递增 <code>bConfigurationValue</code></li>
+  <li>处理配置字符串描述符</li>
+  <li>追加到 <code>fs_configs</code> 或 <code>hs_configs</code> slist</li>
+</ol>
+
+<h3>设置配置 — usbd_config_set()</h3>
+<p>（usbd_config.c:106-140）在 <code>SET_CONFIGURATION</code> 请求时被调用：</p>
+
+<pre>
+<span class="kw">int</span> <span class="fn">usbd_config_set</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx,
+           <span class="kw">const</span> uint8_t new_cfg)
+{
+    <span class="cm">/* 1. 如果有当前配置，先重置 */</span>
+    <span class="kw">if</span> (<span class="fn">usbd_get_config_value</span>(uds_ctx) != <span class="num">0</span>) {
+        ret = <span class="fn">usbd_config_reset</span>(uds_ctx);
+    }
+
+    <span class="cm">/* 2. cfg=0 → 进入 ADDRESS 状态 */</span>
+    <span class="kw">if</span> (new_cfg == <span class="num">0</span>) {
+        <span class="fn">usbd_set_config_value</span>(uds_ctx, <span class="num">0</span>);
+        <span class="kw">return</span> <span class="num">0</span>;
+    }
+
+    <span class="cm">/* 3. 启用默认 alternate 的所有端点 */</span>
+    ret = <span class="fn">usbd_interface_default</span>(uds_ctx, speed, cfg_nd);
+
+    <span class="cm">/* 4. 通知所有类配置已启用 */</span>
+    <span class="fn">usbd_set_config_value</span>(uds_ctx, new_cfg);
+    <span class="fn">usbd_config_classes_enable</span>(cfg_nd, <span class="num">true</span>);
+}
+</pre>
+
+<h3>重置配置 — usbd_config_reset()</h3>
+<p>（usbd_config.c:74-93）：</p>
+<ol>
+  <li>调用 <code>usbd_interface_shutdown()</code> 禁用所有端点</li>
+  <li>清零 alternate 数组</li>
+  <li>设置配置值为 0</li>
+  <li>广播类禁用通知</li>
+</ol>
+
+<h3>配置属性 API</h3>
+<table>
+  <thead>
+    <tr><th>API</th><th>功能</th><th>前提</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>usbd_config_attrib_rwup()</code></td><td>设置远程唤醒属性</td><td>控制器支持 rwup</td></tr>
+    <tr><td><code>usbd_config_attrib_self()</code></td><td>设置自供电属性</td><td>未 enable</td></tr>
+    <tr><td><code>usbd_config_maxpower()</code></td><td>设置最大功耗 (2mA 单位)</td><td>未 enable</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 07 类驱动框架 -->
+<!-- ============================================================ -->
+<h2 id="s07"><span class="num">07</span>类驱动框架 <span class="file-tag">usbd_class.c + usbd_class_api.h</span></h2>
+
+<p><code>usbd_class.c</code>（503 行）实现了 USB 类驱动的注册、查找和分发机制。</p>
+
+<h3>可迭代段（Iterable Sections）机制</h3>
+<p>类实例通过链接器脚本放入特殊的可迭代段中。每个类在 FS 和 HS 速度下各有一个节点：</p>
+
+<pre>
+<span class="cm">/* usbd_data.ld 定义了两个段 */</span>
+<span class="cm">/* usbd_class_fs: 全速类节点段 */</span>
+<span class="cm">/* usbd_class_hs: 高速类节点段 */</span>
+
+<span class="cm">/* 遍历所有 FS 类节点 */</span>
+<span class="macro">STRUCT_SECTION_FOREACH_ALTERNATE</span>(usbd_class_fs, usbd_class_node, c_nd) {
+    <span class="cm">// c_nd->c_data 指向类数据</span>
+    <span class="cm">// c_nd->c_data->name 是类名称</span>
+}
+</pre>
+
+<h3>类注册 — usbd_register_class()</h3>
+<p>（usbd_class.c:296-342）：</p>
+
+<pre>
+<span class="kw">int</span> <span class="fn">usbd_register_class</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx,
+                <span class="kw">const</span> <span class="kw">char</span> *name,
+                <span class="kw">const enum</span> <span class="type">usbd_speed</span> speed, <span class="kw">const</span> uint8_t cfg)
+{
+    <span class="cm">/* 1. 在可迭代段中按名称查找类节点 */</span>
+    c_nd = <span class="fn">usbd_class_node_get</span>(name, speed);
+
+    <span class="cm">/* 2. 校验：设备未初始化、未注册、上下文匹配 */</span>
+    <span class="kw">if</span> (<span class="fn">atomic_test_bit</span>(&amp;c_nd-&gt;state, USBD_CCTX_REGISTERED))
+        <span class="kw">return</span> -EBUSY;
+
+    <span class="cm">/* 3. 追加到配置的 class_list */</span>
+    ret = <span class="fn">usbd_class_append</span>(uds_ctx, c_nd, speed, cfg);
+
+    <span class="cm">/* 4. 设置注册标志，链接上下文 */</span>
+    <span class="fn">atomic_set_bit</span>(&amp;c_nd-&gt;state, USBD_CCTX_REGISTERED);
+    c_data-&gt;uds_ctx = uds_ctx;
+}
+</pre>
+
+<h3>批量注册 — usbd_register_all_classes()</h3>
+<p>（usbd_class.c:356-399）遍历可迭代段中的所有类，可选地通过 blocklist 过滤。DAPLink 项目正是使用此 API 一次性注册 HID + CDC ACM + MSC：</p>
+
+<pre>
+<span class="cm">/* usbd_context.c:106 */</span>
+err = <span class="fn">usbd_register_all_classes</span>(&amp;</span>daplink_usbd, USBD_SPEED_FS, <span class="num">1</span>, NULL);
+</pre>
+
+<h3>类查找策略</h3>
+<p>三个维度的查找方法，用于将 USB 请求路由到正确的类实例：</p>
+
+<table>
+  <thead>
+    <tr><th>查找方法</th><th>函数</th><th>匹配依据</th><th>使用场景</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>按接口</td>
+      <td><code>usbd_class_get_by_iface()</code></td>
+      <td><code>iface_bm &amp; BIT(inum)</code></td>
+      <td>Interface Recipient 的控制请求</td>
+    </tr>
+    <tr>
+      <td>按端点</td>
+      <td><code>usbd_class_get_by_ep()</code></td>
+      <td><code>ep_assigned &amp; ep_bm</code></td>
+      <td>Endpoint Recipient 的控制请求、传输完成分发</td>
+    </tr>
+    <tr>
+      <td>按请求</td>
+      <td><code>usbd_class_get_by_req()</code></td>
+      <td><code>v_reqs->reqs[]</code></td>
+      <td>Device Recipient 的类/厂商请求</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>传输完成分发</h3>
+<p><code>usbd_class_handle_xfer()</code>（usbd_class.c:117-137）通过 <code>bi->owner</code> 定位类实例：</p>
+
+<pre>
+<span class="kw">int</span> <span class="fn">usbd_class_handle_xfer</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx,
+                <span class="kw">struct</span> <span class="type">net_buf</span> *<span class="kw">const</span> buf,
+                <span class="kw">const int</span> err)
+{
+    <span class="kw">struct</span> <span class="type">udc_buf_info</span> *bi = <span class="fn">udc_get_buf_info</span>(buf);
+    <span class="kw">return</span> <span class="fn">usbd_class_request</span>(bi-&gt;owner, buf, err);
+    <span class="cm">// owner 在 usbd_ep_enqueue() 时设置</span>
+}
+</pre>
+
+<h3>类 API 接口 (usbd_class_api.h)</h3>
+<p>每个类通过 <code>struct usbd_class_api</code> 函数指针表定义其行为：</p>
+
+<table>
+  <thead>
+    <tr><th>回调</th><th>触发时机</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>request()</code></td><td>端点传输完成</td><td>数据处理（IN/OUT）</td></tr>
+    <tr><td><code>control_to_dev()</code></td><td>Host→Device 控制请求</td><td>类特定请求处理</td></tr>
+    <tr><td><code>control_to_host()</code></td><td>Device→Host 控制请求</td><td>类特定请求处理</td></tr>
+    <tr><td><code>feature_halt()</code></td><td>SET/CLEAR_FEATURE(ENDPOINT_HALT)</td><td>端点 STALL 通知</td></tr>
+    <tr><td><code>update()</code></td><td>SET_INTERFACE</td><td>Alternate setting 变更</td></tr>
+    <tr><td><code>sof()</code></td><td>每帧 SOF</td><td>定时功能（如 HID 空闲）</td></tr>
+    <tr><td><code>enable()</code></td><td>配置激活</td><td>类启用</td></tr>
+    <tr><td><code>disable()</code></td><td>配置解除</td><td>类禁用</td></tr>
+    <tr><td><code>suspended()</code></td><td>USB SUSPEND</td><td>挂起通知</td></tr>
+    <tr><td><code>resumed()</code></td><td>USB RESUME</td><td>恢复通知</td></tr>
+    <tr><td><code>get_desc()</code></td><td>描述符请求</td><td>返回类描述符链</td></tr>
+    <tr><td><code>init()</code></td><td>栈初始化</td><td>类初始化</td></tr>
+    <tr><td><code>shutdown()</code></td><td>栈关闭</td><td>类清理</td></tr>
+  </tbody>
+</table>
+
+<div class="callout info">
+  <strong>Strategy 模式</strong>
+  <p><code>usbd_class_api</code> 是经典的策略模式。每个类（HID、CDC ACM、MSC 等）提供自己的实现，USB 核心通过统一的函数指针接口调用，无需知道具体类类型。所有 API 函数都有 NULL 安全检查。</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- 08 描述符管理 -->
+<!-- ============================================================ -->
+<h2 id="s08"><span class="num">08</span>描述符管理 <span class="file-tag">usbd_desc.c</span></h2>
+
+<p><code>usbd_desc.c</code>（223 行）管理 USB 描述符的添加、索引分配和查找。</p>
+
+<h3>描述符存储结构</h3>
+<p>描述符通过 <code>sys_dlist</code>（双向链表）存储在 <code>uds_ctx->descriptors</code> 中。每个节点是 <code>struct usbd_desc_node</code>，包含：</p>
+<ul>
+  <li><code>bDescriptorType</code> — 描述符类型（STRING / BOS）</li>
+  <li><code>bLength</code> — 描述符长度</li>
+  <li><code>ptr</code> — 指向实际描述符数据</li>
+  <li><code>str.idx</code> — 字符串索引（自动分配）</li>
+  <li><code>str.utype</code> — 用途类型（LANG / MANUFACTURER / PRODUCT / SERIAL_NUMBER）</li>
+</ul>
+
+<h3>索引自动分配</h3>
+<p><code>desc_add_and_update_idx()</code>（usbd_desc.c:31-81）维护链表中描述符的有序性：</p>
+
+<ul>
+  <li>按 <code>bDescriptorType</code> 分组</li>
+  <li>同类型内按升序排列索引</li>
+  <li>新节点插入到同类型的末尾，索引 = 前节点索引 + 1</li>
+  <li>如果没有同类型节点，索引从 0 开始</li>
+</ul>
+
+<div class="callout warn">
+  <strong>语言 ID 描述符必须最先添加</strong>
+  <p>函数注释明确指出：如果语言 ID 字符串描述符（idx=0）不是第一个添加的，设备将不符合 USB 规范。这是因为 idx=0 具有特殊含义。</p>
+</div>
+
+<h3>usbd_add_descriptor()</h3>
+<p>（usbd_desc.c:120-203）是描述符添加的主入口，处理 STRING 和 BOS 两种类型：</p>
+
+<pre>
+<span class="kw">int</span> <span class="fn">usbd_add_descriptor</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> uds_ctx,
+               <span class="kw">struct</span> <span class="type">usbd_desc_node</span> *<span class="kw">const</span> desc_nd)
+{
+    <span class="cm">// BOS 描述符：可能关联 vendor request</span>
+    <span class="kw">if</span> (desc_nd-&gt;bDescriptorType == <span class="macro">USB_DESC_BOS</span>) {
+        <span class="kw">if</span> (desc_nd-&gt;bos.utype == USBD_DUT_BOS_VREQ)
+            <span class="fn">usbd_device_register_vreq</span>(uds_ctx, desc_nd-&gt;bos.vreq_nd);
+        sys_dlist_append(&amp;uds_ctx-&gt;descriptors, &amp;desc_nd-&gt;node);
+    }
+
+    <span class="cm">// 字符串描述符：自动索引 + 更新设备描述符字段</span>
+    <span class="kw">if</span> (desc_nd-&gt;bDescriptorType == <span class="macro">USB_DESC_STRING</span>) {
+        <span class="fn">desc_add_and_update_idx</span>(uds_ctx, desc_nd);
+
+        <span class="kw">switch</span> (desc_nd-&gt;str.utype) {
+        <span class="kw">case</span> USBD_DUT_STRING_MANUFACTURER:
+            fs_desc-&gt;iManufacturer = desc_nd-&gt;str.idx;
+            hs_desc-&gt;iManufacturer = desc_nd-&gt;str.idx;
+            <span class="kw">break</span>;
+        <span class="kw">case</span> USBD_DUT_STRING_PRODUCT:
+            fs_desc-&gt;iProduct = desc_nd-&gt;str.idx;
+            <span class="cm">// ...</span>
+        }
+    }
+}
+</pre>
+
+<!-- ============================================================ -->
+<!-- 09 消息通知系统 -->
+<!-- ============================================================ -->
+<h2 id="s09"><span class="num">09</span>消息通知系统 <span class="file-tag">usbd_msg.c</span></h2>
+
+<p><code>usbd_msg.c</code>（142 行）实现了 USB 事件向应用层的通知机制。支持两种模式：</p>
+
+<h3>模式一：直接回调</h3>
+<p>当 <code>CONFIG_USBD_MSG_DEFERRED_MODE</code> 未启用时，<code>usbd_msg_pub_simple()</code> 直接在 USB 线程上下文中调用 <code>ctx->msg_cb()</code>。</p>
+
+<h3>模式二：延迟工作队列</h3>
+<p>启用 <code>CONFIG_USBD_MSG_DEFERRED_MODE</code> 后，消息通过 slab 分配、slist 排队、delayed work 投递：</p>
+
+<pre>
+<span class="cm">/* usbd_msg.c:23-27 消息包结构 */</span>
+<span class="kw">struct</span> <span class="type">usbd_msg_pkt</span> {
+    sys_snode_t node;
+    <span class="kw">struct</span> <span class="type">usbd_context</span> *ctx;
+    <span class="kw">struct</span> <span class="type">usbd_msg</span> msg;
+};
+
+<span class="cm">/* 内存池 */</span>
+<span class="macro">K_MEM_SLAB_DEFINE_STATIC</span>(usbd_msg_slab, <span class="kw">sizeof</span>(<span class="kw">struct</span> <span class="type">usbd_msg_pkt</span>),
+                 CONFIG_USBD_MSG_SLAB_COUNT, <span class="kw">sizeof</span>(<span class="kw">void</span> *));
+</pre>
+
+<h3>延迟工作队列处理</h3>
+<pre>
+<span class="cm">/* usbd_msg.c:55-88 */</span>
+<span class="kw">static void</span> <span class="fn">msg_work_handler</span>(<span class="kw">struct</span> <span class="type">k_work</span> *work)
+{
+    <span class="cm">/* 1. 在 spinlock 保护下 peek 链表头部 */</span>
+    key = <span class="fn">k_spin_lock</span>(&amp;ml_lock);
+    node = <span class="fn">sys_slist_peek_head</span>(&amp;msg_list);
+    <span class="fn">k_spin_unlock</span>(&amp;ml_lock, key);
+
+    <span class="cm">/* 2. 检查设备是否已初始化 */</span>
+    <span class="kw">if</span> (!<span class="fn">usbd_is_initialized</span>(m_pkt-&gt;ctx)) {
+        <span class="cm">/* 未初始化则延迟重试 */</span>
+        <span class="fn">k_work_reschedule</span>(dwork, K_MSEC(CONFIG_USBD_MSG_WORK_DELAY));
+        <span class="kw">return</span>;
+    }
+
+    <span class="cm">/* 3. 取出并执行回调 */</span>
+    key = <span class="fn">k_spin_lock</span>(&amp;ml_lock);
+    node = <span class="fn">sys_slist_get</span>(&amp;msg_list);
+    <span class="fn">k_spin_unlock</span>(&amp;ml_lock, key);
+
+    m_pkt-&gt;ctx-&gt;msg_cb(m_pkt-&gt;ctx, &amp;m_pkt-&gt;msg);
+    <span class="fn">k_mem_slab_free</span>(&amp;usbd_msg_slab, (<span class="kw">void</span> *)m_pkt);
+
+    <span class="cm">/* 4. 如果还有消息，继续调度 */</span>
+    <span class="kw">if</span> (!<span class="fn">sys_slist_is_empty</span>(&amp;msg_list))
+        <span class="fn">k_work_schedule</span>(dwork, K_NO_WAIT);
+}
+</pre>
+
+<div class="diagram">
+<pre>
+USB 线程 (usbd_thread)
+    │
+    ├── 事件处理完成
+    │
+    ▼
+usbd_msg_pub_simple(ctx, type, status)
+    │
+    ├── [直接模式]
+    │   └── ctx->msg_cb(ctx, &msg)   ← 在 USB 线程上下文中
+    │
+    └── [延迟模式] CONFIG_USBD_MSG_DEFERRED_MODE
+        │
+        ▼
+    usbd_msg_pub()
+        ├── k_mem_slab_alloc() → 分配 usbd_msg_pkt
+        ├── spin_lock(ml_lock)
+        ├── sys_slist_append() → 加入 msg_list
+        ├── spin_unlock(ml_lock)
+        └── k_work_schedule() → 调度 msg_work
+            │
+            ▼
+        msg_work_handler() (系统工作队列)
+            ├── 检查 usbd_is_initialized()
+            │   └── 否则 reschedule(CONFIG_USBD_MSG_WORK_DELAY)
+            ├── 取出消息
+            ├── ctx->msg_cb()  ← 在工作队列上下文中
+            ├── k_mem_slab_free()
+            └── 继续处理下一条消息
+</pre>
+</div>
+
+<!-- ============================================================ -->
+<!-- 10 HID 类实现 -->
+<!-- ============================================================ -->
+<h2 id="s10"><span class="num">10</span>HID 类实现 <span class="file-tag">class/usbd_hid.c</span> <span class="badge green">872 行</span></h2>
+
+<p><code>usbd_hid.c</code> 是 HID 类驱动的完整实现，基于设备树 <code>zephyr,hid_device</code> 兼容节点自动实例化。</p>
+
+<h3>描述符结构</h3>
+<p>HID 类使用 <code>struct usbd_hid_descriptor</code> 组合了所有必要的描述符：</p>
+
+<pre>
+<span class="kw">struct</span> <span class="type">usbd_hid_descriptor</span> {
+    <span class="kw">struct</span> <span class="type">usb_if_descriptor</span>     if0;        <span class="cm">// 接口描述符 (alt=0)</span>
+    <span class="kw">struct</span> <span class="type">hid_descriptor</span>           hid;        <span class="cm">// HID 类描述符</span>
+    <span class="kw">struct</span> <span class="type">usb_ep_descriptor</span>        in_ep;      <span class="cm">// FS IN 端点</span>
+    <span class="kw">struct</span> <span class="type">usb_ep_descriptor</span>        hs_in_ep;   <span class="cm">// HS IN 端点</span>
+    <span class="kw">struct</span> <span class="type">usb_ep_descriptor</span>        out_ep;     <span class="cm">// FS OUT 端点 (可选)</span>
+    <span class="kw">struct</span> <span class="type">usb_ep_descriptor</span>        hs_out_ep;  <span class="cm">// HS OUT 端点 (可选)</span>
+
+    <span class="cm">// 以下仅在 MPS &gt; 64 时存在 (HS 需要 alternate)</span>
+    <span class="kw">struct</span> <span class="type">usb_if_descriptor</span>     if0_1;      <span class="cm">// 接口描述符 (alt=1)</span>
+    <span class="kw">struct</span> <span class="type">usb_ep_descriptor</span>        alt_hs_in_ep;
+    <span class="kw">struct</span> <span class="type">usb_ep_descriptor</span>        alt_hs_out_ep;
+};
+</pre>
+
+<h3>HID 类 API 实现</h3>
+<pre>
+<span class="kw">struct</span> <span class="type">usbd_class_api</span> usbd_hid_api = {
+    .request         = <span class="fn">usbd_hid_request</span>,      <span class="cm">// 端点传输完成</span>
+    .update          = NULL,
+    .sof             = <span class="fn">usbd_hid_sof</span>,           <span class="cm">// SOF 定时回调</span>
+    .enable          = <span class="fn">usbd_hid_enable</span>,        <span class="cm">// 配置激活</span>
+    .disable         = <span class="fn">usbd_hid_disable</span>,       <span class="cm">// 配置禁用</span>
+    .suspended       = <span class="fn">usbd_hid_suspended</span>,
+    .resumed         = <span class="fn">usbd_hid_resumed</span>,
+    .control_to_dev  = <span class="fn">usbd_hid_ctd</span>,           <span class="cm">// Host→Device 控制请求</span>
+    .control_to_host = <span class="fn">usbd_hid_cth</span>,           <span class="cm">// Device→Host 控制请求</span>
+    .get_desc        = <span class="fn">usbd_hid_get_desc</span>,      <span class="cm">// 描述符获取</span>
+    .init            = <span class="fn">usbd_hid_init</span>,          <span class="cm">// 初始化</span>
+    .shutdown        = <span class="fn">usbd_hid_shutdown</span>,
+};
+</pre>
+
+<h3>传输完成处理 — usbd_hid_request()</h3>
+<p>（usbd_hid.c:114-144）：</p>
+
+<pre>
+<span class="kw">static int</span> <span class="fn">usbd_hid_request</span>(<span class="kw">struct</span> <span class="type">usbd_class_data</span> *<span class="kw">const</span> c_data,
+                   <span class="kw">struct</span> <span class="type">net_buf</span> *<span class="kw">const</span> buf, <span class="kw">const int</span> err)
+{
+    bi = <span class="fn">udc_get_buf_info</span>(buf);
+
+    <span class="cm">// OUT 端点：主机发送的 Output Report</span>
+    <span class="kw">if</span> (bi-&gt;ep == <span class="fn">hid_get_out_ep</span>(c_data)) {
+        <span class="kw">if</span> (ops-&gt;output_report != NULL &amp;&amp; err == <span class="num">0</span>)
+            ops-&gt;output_report(dev, buf-&gt;len, buf-&gt;data);
+        <span class="fn">k_work_submit</span>(&amp;ddata-&gt;output_work); <span class="cm">// 重新入队 OUT buffer</span>
+    }
+
+    <span class="cm">// IN 端点：发送完成的 Input Report</span>
+    <span class="kw">if</span> (bi-&gt;ep == <span class="fn">hid_get_in_ep</span>(c_data)) {
+        <span class="kw">if</span> (ops-&gt;input_report_done != NULL)
+            ops-&gt;input_report_done(dev, buf-&gt;__buf);
+        <span class="kw">else</span>
+            <span class="fn">k_sem_give</span>(&amp;ddata-&gt;in_sem); <span class="cm">// 释放信号量</span>
+    }
+
+    <span class="kw">return</span> <span class="fn">usbd_ep_buf_free</span>(uds_ctx, buf);
+}
+</pre>
+
+<h3>HID 类特定控制请求</h3>
+<p><code>usbd_hid_ctd()</code>（Host→Device）和 <code>usbd_hid_cth()</code>（Device→Host）处理 HID 类特定请求：</p>
+
+<table>
+  <thead>
+    <tr><th>请求</th><th>方向</th><th>处理函数</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>SET_IDLE</td><td>Host→Device</td><td><code>handle_set_idle()</code>：设置空闲速率</td></tr>
+    <tr><td>SET_REPORT</td><td>Host→Device</td><td><code>handle_set_report()</code>：接收报告</td></tr>
+    <tr><td>SET_PROTOCOL</td><td>Host→Device</td><td><code>handle_set_protocol()</code>：Boot/Report 协议切换</td></tr>
+    <tr><td>GET_IDLE</td><td>Device→Host</td><td><code>handle_get_idle()</code>：获取空闲速率</td></tr>
+    <tr><td>GET_REPORT</td><td>Device→Host</td><td><code>handle_get_report()</code>：获取报告数据</td></tr>
+    <tr><td>GET_PROTOCOL</td><td>Device→Host</td><td><code>handle_get_protocol()</code>：获取当前协议</td></tr>
+    <tr><td>GET_DESCRIPTOR</td><td>Device→Host</td><td><code>handle_get_descriptor()</code>：HID/Report 描述符</td></tr>
+  </tbody>
+</table>
+
+<h3>HID 数据流图</h3>
+<div class="diagram">
+<pre>
+                              ┌─────────────┐
+                              │   USB Host   │
+                              └──────┬───────┘
+                                     │
+                    ┌────────────────┼────────────────┐
+                    │                │                │
+              Output Report    Control EP        Input Report
+              (SET_REPORT)    (GET_DESCRIPTOR)  (GET_REPORT)
+                    │                │                │
+                    ▼                ▼                ▼
+            ┌─────────────────────────────────────────────────┐
+            │            usbd_ch9.c (协议引擎)                  │
+            │                                                   │
+            │  nonstd_request() → usbd_class_get_by_iface()   │
+            │  → usbd_hid_ctd() / usbd_hid_cth()              │
+            └───────┬───────────────────────┬──────────────────┘
+                    │                       │
+             OUT EP 数据传输            IN EP 数据传输
+                    │                       │
+                    ▼                       ▼
+            ┌───────────────────────────────────────────────────┐
+            │            usbd_hid_request()                      │
+            │                                                    │
+            │  OUT EP → ops->output_report(dev, len, data)      │
+            │         → k_work_submit(output_work) 重新入队      │
+            │                                                    │
+            │  IN EP → ops->input_report_done(dev, buf)         │
+            │        → k_sem_give(in_sem) 释放同步量             │
+            └───────┬───────────────────────────┬────────────────┘
+                    │                           │
+                    ▼                           ▼
+          ┌─────────────────┐        ┌──────────────────────┐
+          │  output_report  │        │  hid_device_submit   │
+          │  (接收主机数据)  │        │  _report()           │
+          │                 │        │  (发送数据到主机)     │
+          │  → k_msgq       │        │  → hid_buf_alloc_ext │
+          │  → dap_work     │        │  → usbd_ep_enqueue   │
+          └─────────────────┘        │  → k_sem_take(等待)  │
+                                     └──────────────────────┘
+</pre>
+</div>
+
+<!-- ============================================================ -->
+<!-- 11 DAPLink 实战分析 -->
+<!-- ============================================================ -->
+<h2 id="s11"><span class="num">11</span>DAPLink 实战分析</h2>
+
+<p>DAPLink Zephyr 项目是一个复合 USB 设备，同时提供 HID（CMSIS-DAP 调试）、CDC ACM（虚拟串口）和可选的 MSC（拖拽烧录）功能。它完美展示了 device_next 栈的使用方式。</p>
+
+<h3>USB 设备上下文定义 (usbd_context.c)</h3>
+
+<pre>
+<span class="cm">/* src/usb/usbd_context.c:22-38 */</span>
+<span class="macro">USBD_DEVICE_DEFINE</span>(daplink_usbd,
+           DEVICE_DT_GET(DT_NODELABEL(zephyr_udc0)),
+           <span class="num">0x0D28</span>, <span class="num">0x0204</span>);   <span class="cm">// VID: NXP, PID: DAPLink</span>
+
+<span class="macro">USBD_DESC_LANG_DEFINE</span>(daplink_lang);
+<span class="macro">USBD_DESC_MANUFACTURER_DEFINE</span>(daplink_mfr, <span class="str">"ARM"</span>);
+<span class="macro">USBD_DESC_PRODUCT_DEFINE</span>(daplink_product, <span class="str">"DAPLink CMSIS-DAP"</span>);
+<span class="macro">USBD_DESC_SERIAL_NUMBER_DEFINE</span>(daplink_sn);
+
+<span class="cm">/* 自供电，250mA */</span>
+<span class="macro">USBD_CONFIGURATION_DEFINE</span>(daplink_fs_config,
+                  USB_SCD_SELF_POWERED, <span class="num">125</span>,
+                  &amp;fs_cfg_desc);
+</pre>
+
+<h3>初始化流程 (usbd_context.c:70-133)</h3>
+<p><code>daplink_usbd_init()</code> 严格遵循 device_next 栈的初始化顺序：</p>
+
+<ol>
+  <li>添加字符串描述符（语言、厂商、产品、序列号）</li>
+  <li>添加 Full-Speed 配置</li>
+  <li>批量注册所有类 <code>usbd_register_all_classes()</code></li>
+  <li>设置复合设备类代码 <code>USB_BCC_MISCELLANEOUS</code></li>
+  <li>注册消息回调</li>
+  <li>设置自供电属性</li>
+  <li>调用 <code>usbd_init()</code></li>
+</ol>
+
+<pre>
+<span class="cm">/* 关键代码路径 */</span>
+<span class="cm">/* 步骤 3: 自动注册 HID + CDC ACM + MSC */</span>
+err = <span class="fn">usbd_register_all_classes</span>(&amp;daplink_usbd, USBD_SPEED_FS, <span class="num">1</span>, NULL);
+
+<span class="cm">/* 步骤 4: 复合设备类代码 (USB 2.0 要求) */</span>
+<span class="fn">usbd_device_set_code_triple</span>(&amp;daplink_usbd, USBD_SPEED_FS,
+                USB_BCC_MISCELLANEOUS, <span class="num">0x02</span>, <span class="num">0x01</span>);
+</pre>
+
+<h3>消息回调 (usbd_context.c:52-68)</h3>
+<p>应用层通过消息回调监控 USB 状态，特别是 CDC ACM 的线路编码变更：</p>
+
+<pre>
+<span class="kw">static void</span> <span class="fn">usbd_msg_cb</span>(<span class="kw">struct</span> <span class="type">usbd_context</span> *<span class="kw">const</span> usbd_ctx,
+              <span class="kw">const struct</span> <span class="type">usbd_msg</span> *<span class="kw">const</span> msg)
+{
+    <span class="cm">/* CDC ACM 线路编码变更 → 同步到 UART Bridge */</span>
+    <span class="kw">if</span> (msg-&gt;type == USBD_MSG_CDC_ACM_LINE_CODING ||
+        msg-&gt;type == USBD_MSG_CDC_ACM_CONTROL_LINE_STATE) {
+        <span class="kw">for</span> (uint8_t i = <span class="num">0</span>; i &lt; ARRAY_SIZE(uart_bridges); i++)
+            <span class="fn">uart_bridge_settings_update</span>(msg-&gt;dev, uart_bridges[i]);
+    }
+}
+</pre>
+
+<h3>HID-DAP 适配器 (hid_dap.c)</h3>
+<p><code>hid_dap.c</code> 是 CMSIS-DAP 协议与 USB HID 之间的桥梁：</p>
+
+<h4>HID 报告描述符</h4>
+<pre>
+<span class="kw">static const</span> uint8_t hid_report_desc[] = {
+    <span class="num">0x06</span>, <span class="num">0x00</span>, <span class="num">0xFF</span>,    <span class="cm">/* Usage Page (Vendor Defined 0xFF00) */</span>
+    <span class="num">0x09</span>, <span class="num">0x01</span>,          <span class="cm">/* Usage (0x01) */</span>
+    <span class="num">0xA1</span>, <span class="num">0x01</span>,          <span class="cm">/* Collection (Application) */</span>
+    <span class="cm">/* Input report: device to host (64 bytes) */</span>
+    <span class="num">0x09</span>, <span class="num">0x02</span>,          <span class="cm">/*   Usage (0x02) */</span>
+    <span class="num">0x75</span>, <span class="num">0x08</span>,          <span class="cm">/*   Report Size (8) */</span>
+    <span class="num">0x95</span>, <span class="num">0x40</span>,          <span class="cm">/*   Report Count (64) */</span>
+    <span class="num">0x81</span>, <span class="num">0x02</span>,          <span class="cm">/*   Input (Data,Var,Abs) */</span>
+    <span class="cm">/* Output report: host to device (64 bytes) */</span>
+    <span class="num">0x09</span>, <span class="num">0x03</span>,          <span class="cm">/*   Usage (0x03) */</span>
+    <span class="num">0x95</span>, <span class="num">0x40</span>,          <span class="cm">/*   Report Count (64) */</span>
+    <span class="num">0x91</span>, <span class="num">0x02</span>,          <span class="cm">/*   Output (Data,Var,Abs) */</span>
+    <span class="num">0xC0</span>                 <span class="cm">/* End Collection */</span>
+};
+</pre>
+
+<h4>DAP 命令处理数据流</h4>
+<pre>
+<span class="cm">/* src/usb/hid_dap.c:60-89 */</span>
+<span class="kw">static void</span> <span class="fn">dap_work_handler</span>(<span class="kw">struct</span> <span class="type">k_work</span> *work)
+{
+    <span class="kw">struct</span> <span class="type">dap_msg</span> msg;
+
+    <span class="kw">while</span> (<span class="fn">k_msgq_get</span>(&amp;</span>dap_cmd_msgq, &amp;msg, K_NO_WAIT) == <span class="num">0</span>) {
+        <span class="fn">k_mutex_lock</span>(&amp;</span>dap_bus_mutex, K_FOREVER);
+
+        <span class="fn">memset</span>(dap_response, <span class="num">0</span>, DAP_PACKET_SIZE);
+        result = <span class="fn">DAP_ExecuteCommand</span>(msg.request, dap_response);
+
+        uint16_t resp_len = (uint16_t)(result &amp; <span class="num">0xFFFF</span>);
+        <span class="fn">k_mutex_unlock</span>(&amp;</span>dap_bus_mutex);
+
+        <span class="kw">if</span> (hid_ready)
+            <span class="fn">hid_device_submit_report</span>(hid_dev, resp_len, dap_response);
+    }
+}
+</pre>
+
+<h3>端到端数据流图</h3>
+<div class="diagram">
+<pre>
+  调试器 (pyOCD / OpenOCD)              目标 MCU (SWD/JTAG)
+         │                                     ▲
+         │ USB HID Report (64 bytes)           │ SWD/JTAG 信号
+         ▼                                     │
+  ┌──────────────────────────────────────────────────────────┐
+  │                    DAPLink Zephyr 固件                     │
+  │                                                            │
+  │  ┌────────────────────────────────────────────────────┐  │
+  │  │              USB device_next 栈                      │  │
+  │  │                                                      │  │
+  │  │  usbd_thread → usbd_handle_ctrl_xfer()              │  │
+  │  │                usbd_class_handle_xfer()             │  │
+  │  │                         │                            │  │
+  │  │                         ▼                            │  │
+  │  │              usbd_hid_request()                      │  │
+  │  │  OUT EP → ops->output_report()                      │  │
+  │  │  IN EP  → ops->input_report_done()                  │  │
+  │  └────────────────────┬───────────────────────────────┘  │
+  │                        │                                  │
+  │                        ▼                                  │
+  │  ┌────────────────────────────────────────────────────┐  │
+  │  │            hid_dap.c (适配层)                        │  │
+  │  │                                                      │  │
+  │  │  dap_output_report() ──► k_msgq (dap_cmd_msgq)     │  │
+  │  │                              │                      │  │
+  │  │                              ▼                      │  │
+  │  │  dap_work_handler()                               │  │
+  │  │    ├── k_msgq_get(&dap_cmd_msgq)                  │  │
+  │  │    ├── k_mutex_lock(&dap_bus_mutex)               │  │
+  │  │    ├── DAP_ExecuteCommand(request, response)      │  │
+  │  │    ├── k_mutex_unlock(&dap_bus_mutex)             │  │
+  │  │    └── hid_device_submit_report(response)         │  │
+  │  │         └── usbd_ep_enqueue(IN EP)                │  │
+  │  └────────────────────────┬───────────────────────────┘  │
+  │                            │                              │
+  │                            ▼                              │
+  │  ┌────────────────────────────────────────────────────┐  │
+  │  │           DAP.c (CMSIS-DAP 协议)                    │  │
+  │  │  DAP_ExecuteCommand() → SW_DP.c → GPIO/SWD 操作    │  │
+  │  └────────────────────────────────────────────────────┘  │
+  └──────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<h3>并发保护</h3>
+<p>DAPLink 使用多层同步机制保护共享资源：</p>
+<table>
+  <thead>
+    <tr><th>同步原语</th><th>保护对象</th><th>上下文</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>k_mutex (dap_bus_mutex)</code></td><td>SWD/JTAG 总线访问</td><td>线程间（DAP work vs 其他）</td></tr>
+    <tr><td><code>k_msgq (dap_cmd_msgq)</code></td><td>HID 报告到 DAP 命令队列</td><td>USB 线程 → DAP work</td></tr>
+    <tr><td><code>k_sem (in_sem)</code></td><td>Input Report 同步</td><td>submit_report 阻塞等待完成</td></tr>
+    <tr><td><code>atomic (hid_ready)</code></td><td>HID 接口就绪标志</td><td>enable/disable 回调 → submit</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 12 Kconfig 与设备树 -->
+<!-- ============================================================ -->
+<h2 id="s12"><span class="num">12</span>Kconfig 与设备树</h2>
+
+<h3>核心 Kconfig 选项</h3>
+<table>
+  <thead>
+    <tr><th>选项</th><th>默认值</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>CONFIG_USBD_THREAD_STACK_SIZE</code></td>
+      <td>1024</td>
+      <td>USB 设备线程栈大小</td>
+    </tr>
+    <tr>
+      <td><code>CONFIG_USBD_THREAD_INIT_PRIO</code></td>
+      <td>—</td>
+      <td><code>SYS_INIT</code> 优先级（POST_KERNEL 阶段）</td>
+    </tr>
+    <tr>
+      <td><code>CONFIG_USBD_MAX_UDC_MSG</code></td>
+      <td>8</td>
+      <td>消息队列最大 UDC 事件数</td>
+    </tr>
+    <tr>
+      <td><code>CONFIG_USBD_LOG_LEVEL</code></td>
+      <td>OFF</td>
+      <td>USB 设备栈日志级别</td>
+    </tr>
+    <tr>
+      <td><code>CONFIG_USBD_MSG_DEFERRED_MODE</code></td>
+      <td>n</td>
+      <td>启用延迟消息投递（工作队列）</td>
+    </tr>
+    <tr>
+      <td><code>CONFIG_USBD_MSG_SLAB_COUNT</code></td>
+      <td>4</td>
+      <td>延迟消息内存池大小</td>
+    </tr>
+    <tr>
+      <td><code>CONFIG_USBD_MSG_WORK_DELAY</code></td>
+      <td>10 (ms)</td>
+      <td>未初始化时消息重投延迟</td>
+    </tr>
+    <tr>
+      <td><code>CONFIG_USBD_BOS_SUPPORT</code></td>
+      <td>n</td>
+      <td>BOS 描述符支持</td>
+    </tr>
+    <tr>
+      <td><code>CONFIG_USBD_VREQ_SUPPORT</code></td>
+      <td>n</td>
+      <td>Vendor Request 支持</td>
+    </tr>
+    <tr>
+      <td><code>CONFIG_USBD_HWINFO_DEVID_LENGTH</code></td>
+      <td>—</td>
+      <td>用于序列号的硬件 ID 长度</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>HID 相关 Kconfig</h3>
+<table>
+  <thead>
+    <tr><th>选项</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>CONFIG_USBD_HID_LOG_LEVEL</code></td><td>HID 类日志级别</td></tr>
+    <tr><td><code>CONFIG_USBD_HID_IN_BUF_COUNT</code></td><td>HID IN 缓冲池大小</td></tr>
+    <tr><td><code>CONFIG_USBD_HID_INIT_PRIORITY</code></td><td>HID 设备初始化优先级</td></tr>
+    <tr><td><code>CONFIG_USBD_HID_SET_POLLING_PERIOD</code></td><td>允许设置端点轮询周期</td></tr>
+  </tbody>
+</table>
+
+<h3>设备树节点</h3>
+<p>HID 设备通过设备树定义：</p>
+
+<pre>
+<span class="cm">/* 设备树中的 HID 设备定义示例 */</span>
+hid_device_0: hid_device_0 {
+    compatible = <span class="str">"zephyr,hid_device"</span>;
+    in-report-size = <span class="num">64</span>;
+    out-report-size = <span class="num">64</span>;
+    label = <span class="str">"HID_DAP"</span>;
+};
+</pre>
+
+<p>设备树 compatible <code>"zephyr,hid_device"</code> 触发 <code>DT_INST_FOREACH_STATUS_OKAY(USBD_HID_INSTANCE_DEFINE)</code>，自动为每个状态为 okay 的节点生成：</p>
+<ul>
+  <li>HID 描述符结构体</li>
+  <li>FS/HS 描述符指针数组</li>
+  <li>net_buf 缓冲池</li>
+  <li><code>USBD_DEFINE_CLASS</code> 类注册</li>
+  <li><code>DEVICE_DT_INST_DEFINE</code> 设备实例</li>
+</ul>
+
+<!-- ============================================================ -->
+<!-- 13 架构总结与设计模式 -->
+<!-- ============================================================ -->
+<h2 id="s13"><span class="num">13</span>架构总结与设计模式</h2>
+
+<p>Zephyr device_next USB 设备栈展现了多个经典设计模式的精妙应用。以下是对其架构模式的总结：</p>
+
+<h3>1. 观察者模式 (Observer) — 类事件广播</h3>
+<p><code>usbd_class_bcast_event()</code> 遍历 <code>class_list</code> 中的所有类实例，将 SUSPEND/RESUME/SOF 事件通知给每个观察者（类驱动）。类驱动通过实现对应的回调函数（<code>suspended()</code>、<code>resumed()</code>、<code>sof()</code>）来响应事件。</p>
+
+<div class="diagram">
+<pre>
+    USB 总线事件
+        │
+        ▼
+  usbd_class_bcast_event()
+        │
+        ├── usbd_class_suspended(HID)
+        ├── usbd_class_suspended(CDC ACM)
+        └── usbd_class_suspended(MSC)
+
+  每个类独立响应，互不干扰
+</pre>
+</div>
+
+<h3>2. 策略模式 (Strategy) — 类 API 函数指针</h3>
+<p><code>struct usbd_class_api</code> 定义了 13 个函数指针，每个 USB 类（HID、CDC、MSC 等）提供自己的实现。USB 核心无需知道具体类类型，通过统一的接口多态调用。</p>
+
+<pre>
+<span class="cm">// 策略接口</span>
+<span class="kw">struct</span> <span class="type">usbd_class_api</span> {
+    int (*request)(struct usbd_class_data *, struct net_buf *, int);
+    int (*control_to_dev)(...);
+    int (*control_to_host)(...);
+    void (*enable)(struct usbd_class_data *);
+    <span class="cm">// ... 共 13 个策略方法</span>
+};
+
+<span class="cm">// 具体策略：HID</span>
+<span class="kw">struct</span> <span class="type">usbd_class_api</span> usbd_hid_api = { ... };
+
+<span class="cm">// 具体策略：CDC ACM</span>
+<span class="kw">struct</span> <span class="type">usbd_class_api</span> cdc_acm_api = { ... };
+
+<span class="cm">// 上下文调用</span>
+<span class="fn">usbd_class_request</span>(bi-&gt;owner, buf, err);
+    → api-&gt;request(c_data, buf, err);  <span class="cm">// 多态分派</span>
+</pre>
+
+<h3>3. 状态机 (State Machine) — USB Chapter 9</h3>
+<p>USB Chapter 9 定义了设备状态机：<code>DEFAULT → ADDRESS → CONFIGURED</code>。<code>usbd_ch9_data.state</code> 跟踪当前状态，每个标准请求处理函数都会校验当前状态是否允许该操作：</p>
+
+<div class="diagram">
+<pre>
+                    ┌───────────┐
+                    │  DEFAULT   │ ← 上电 / 总线重置
+                    └─────┬─────┘
+                          │ SET_ADDRESS(wValue != 0)
+                          ▼
+                    ┌───────────┐
+              ┌────│  ADDRESS   │────┐
+              │    └───────────┘    │
+              │ SET_ADDRESS(0)      │ SET_CONFIGURATION(cfg != 0)
+              │                     ▼
+              │              ┌───────────┐
+              │              │ CONFIGURED │
+              │              │             │
+              │              │ - 端点启用  │
+              │              │ - 类激活    │
+              │              └──────┬──────┘
+              │                     │ SET_CONFIGURATION(0)
+              └─────────────────────┘
+
+  状态校验规则:
+  ├── DEFAULT: SET_ADDRESS ✓, SET_CONFIGURATION ✗
+  ├── ADDRESS: SET_ADDRESS ✓, SET_CONFIGURATION ✓, SET_INTERFACE ✗
+  └── CONFIGURED: 所有请求 ✓ (在权限范围内)
+</pre>
+</div>
+
+<h3>4. 线程安全设计</h3>
+<table>
+  <thead>
+    <tr><th>同步机制</th><th>保护对象</th><th>使用位置</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>k_mutex</code></td>
+      <td>usbd_context 整体</td>
+      <td><code>usbd_device_lock/unlock</code> 包裹所有公开 API</td>
+    </tr>
+    <tr>
+      <td><code>k_spinlock</code> (ep_event_lock)</td>
+      <td>ep_events slist</td>
+      <td><code>usbd_event_carrier()</code> ISR → <code>event_handler_ep_request()</code> 线程</td>
+    </tr>
+    <tr>
+      <td><code>k_spinlock</code> (ml_lock)</td>
+      <td>msg_list slist</td>
+      <td>延迟消息投递中的链表操作</td>
+    </tr>
+    <tr>
+      <td><code>k_sched_lock</code></td>
+      <td>调度器</td>
+      <td><code>usbd_init()</code> 和 <code>usbd_enable()</code> 中防止初始化期间被抢占</td>
+    </tr>
+    <tr>
+      <td><code>atomic_t</code> (state)</td>
+      <td>类注册状态</td>
+      <td><code>USBD_CCTX_REGISTERED</code> 位的原子操作</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>5. 零拷贝缓冲管理</h3>
+<p>USB 栈使用 <code>net_buf</code> 链进行数据传输，通过 <code>bi->owner</code> 追踪缓冲区归属，实现零拷贝的类驱动分发：</p>
+
+<ol>
+  <li>类驱动调用 <code>usbd_ep_enqueue()</code> 时设置 <code>bi->owner = c_data</code></li>
+  <li>传输完成后，<code>usbd_class_handle_xfer()</code> 通过 <code>bi->owner</code> 找到正确的类实例</li>
+  <li>调用 <code>usbd_class_request(bi->owner, buf, err)</code> 直接传递原始 buffer</li>
+  <li>类驱动处理完后调用 <code>usbd_ep_buf_free()</code> 释放</li>
+</ol>
+
+<div class="callout tip">
+  <strong>Owner Tracking 的优势</strong>
+  <p>相比传统的"按端点号查找类"的方式，owner tracking 直接通过指针定位类实例，避免了线性搜索。这对于有多个类实例共享相似端点配置的复合设备尤为重要。</p>
+</div>
+
+<h3>6. 可迭代段 (Iterable Sections) — 静态注册</h3>
+<p>USB 类通过链接器可迭代段实现编译时注册、运行时遍历的零开销模式：</p>
+
+<pre>
+<span class="cm">// 编译时：USBD_DEFINE_CLASS 宏将类节点放入特殊段</span>
+<span class="macro">USBD_DEFINE_CLASS</span>(hid_0, &amp;usbd_hid_api, priv, NULL);
+    → __attribute__((section("usbd_class_fs")))
+
+<span class="cm">// 运行时：遍历段中的所有节点</span>
+<span class="macro">STRUCT_SECTION_FOREACH_ALTERNATE</span>(usbd_class_fs, usbd_class_node, c_nd) {
+    <span class="cm">// c_nd 自动指向段中的下一个节点</span>
+}
+</pre>
+
+<p>这种设计使得添加新的 USB 类无需修改核心代码，只需定义自己的类实例即可被自动发现和注册。</p>
+
+<h3>7. 整体架构分层图</h3>
+<div class="diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                    应用层 (Application)                       │
+│   usbd_msg_cb() ← 事件通知    hid_device_ops ← HID 回调     │
+├─────────────────────────────────────────────────────────────┤
+│                  类驱动层 (Class Drivers)                     │
+│   ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │
+│   │ HID      │ │ CDC ACM  │ │ MSC      │ │ 自定义   │     │
+│   │ usbd_hid │ │ cdc_acm  │ │ usbd_msc │ │          │     │
+│   │ _api     │ │ _api     │ │ _api     │ │ _api     │     │
+│   └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘     │
+│        │             │             │             │           │
+│        └──────┬──────┘──────┬──────┘             │           │
+│               │             │                    │           │
+├───────────────┼─────────────┼────────────────────┼───────────┤
+│          类框架层 (usbd_class.c / usbd_class_api.h)          │
+│   注册 / 查找 / 分发 / 生命周期管理                           │
+├─────────────────────────────────────────────────────────────┤
+│              USB 核心层 (Core Stack)                          │
+│   ┌────────────┐ ┌────────────┐ ┌────────────┐             │
+│   │ usbd_core  │ │ usbd_ch9   │ │ usbd_device│             │
+│   │ 事件循环    │ │ 协议引擎    │ │ 生命周期    │             │
+│   └────────────┘ └────────────┘ └────────────┘             │
+│   ┌────────────┐ ┌────────────┐ ┌────────────┐             │
+│   │ usbd_init  │ │ usbd_config│ │ usbd_ep    │             │
+│   │ 端点分配    │ │ 配置管理    │ │ 端点操作    │             │
+│   └────────────┘ └────────────┘ └────────────┘             │
+│   ┌────────────┐ ┌────────────┐ ┌────────────┐             │
+│   │ usbd_desc  │ │ usbd_msg   │ │ usbd_iface │             │
+│   │ 描述符管理  │ │ 消息通知    │ │ 接口管理    │             │
+│   └────────────┘ └────────────┘ └────────────┘             │
+├─────────────────────────────────────────────────────────────┤
+│              UDC 驱动层 (USB Device Controller)               │
+│   udc_init / udc_enable / udc_ep_enqueue / udc_event        │
+├─────────────────────────────────────────────────────────────┤
+│              硬件层 (Hardware)                                │
+│   STM32 USB OTG FS / nRF USBD / Kinetis USB                 │
+└─────────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<div class="callout info">
+  <strong>核心代码统计</strong>
+  <p>
+    device_next 核心栈总计 <strong>4911 行</strong> C 代码（不含类驱动），其中 usbd_ch9.c 独占 <strong>1306 行</strong>（26.6%），是协议实现的绝对核心。加上 HID 类的 <strong>872 行</strong>，完整分析覆盖了约 <strong>5783 行</strong> 源码。
+  </p>
+</div>
+
+</div>
+
+<!-- ==================== FOOTER ==================== -->
+<div class="footer">
+  <p>基于 Zephyr RTOS <code>subsys/usb/device_next/</code> 源码分析 | 生成日期: 2026-05-13</p>
+  <p>Zephyr Project — Apache 2.0 License | Nordic Semiconductor ASA 原始贡献</p>
+</div>
+
+</body>
+</html>
