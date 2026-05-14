@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zephyr net_buf 网络缓冲区 — 源码深度剖析与使用指南</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f5f7fa;
+    --surface2: #eef1f6;
+    --border: #d8dce6;
+    --text: #1a1d27;
+    --text-dim: #6b7085;
+    --accent: #2563eb;
+    --accent2: #6d28d9;
+    --green: #059669;
+    --orange: #d97706;
+    --red: #dc2626;
+    --cyan: #0891b2;
+    --yellow: #b45309;
+    --code-bg: #f8f9fc;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 0;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #fefce8 0%, #ffffff 50%, #eff6ff 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 0 40px;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 2.4em;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--orange), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 12px;
+  }
+  .header .subtitle {
+    color: var(--text-dim);
+    font-size: 1.1em;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .header .version {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 4px 14px;
+    border-radius: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-size: 0.85em;
+    font-family: monospace;
+  }
+
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 32px;
+    margin: 32px auto;
+    max-width: 900px;
+  }
+  .toc h2 {
+    font-size: 1.2em;
+    color: var(--accent);
+    margin-bottom: 12px;
+    border: none;
+    padding: 0;
+  }
+  .toc ol { padding-left: 20px; }
+  .toc li { margin: 6px 0; }
+  .toc a {
+    color: var(--text);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); }
+
+  .content {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px 64px;
+  }
+
+  h2 {
+    font-size: 1.6em;
+    margin: 48px 0 20px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text);
+  }
+  h2 .num {
+    color: var(--accent);
+    font-weight: 300;
+    margin-right: 8px;
+  }
+
+  h3 {
+    font-size: 1.2em;
+    margin: 32px 0 12px;
+    color: var(--accent);
+  }
+
+  h4 {
+    font-size: 1.05em;
+    margin: 20px 0 8px;
+    color: var(--text);
+  }
+
+  p { margin: 10px 0; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: 14px 0;
+    font-size: 0.88em;
+    line-height: 1.6;
+  }
+  code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  }
+  :not(pre) > code {
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--cyan);
+  }
+
+  .kw { color: var(--accent2); font-weight: 600; }
+  .fn { color: var(--green); }
+  .str { color: var(--orange); }
+  .cm { color: var(--text-dim); font-style: italic; }
+  .type { color: var(--cyan); }
+  .num { color: var(--yellow); }
+  .macro { color: var(--red); font-weight: 600; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.95em;
+  }
+  th {
+    background: var(--surface2);
+    color: var(--accent);
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:hover td { background: rgba(37, 99, 235, 0.05); }
+
+  .diagram {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+  .diagram pre {
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    font-size: 0.88em;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  .callout {
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    border-left: 4px solid;
+  }
+  .callout.info {
+    background: rgba(37, 99, 235, 0.06);
+    border-color: var(--accent);
+  }
+  .callout.warn {
+    background: rgba(217, 119, 6, 0.06);
+    border-color: var(--orange);
+  }
+  .callout.tip {
+    background: rgba(5, 150, 105, 0.06);
+    border-color: var(--green);
+  }
+  .callout strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.95em;
+  }
+  .callout.info strong { color: var(--accent); }
+  .callout.warn strong { color: var(--orange); }
+  .callout.tip strong { color: var(--green); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    font-weight: 600;
+  }
+  .badge.blue { background: rgba(37,99,235,0.12); color: var(--accent); }
+  .badge.green { background: rgba(5,150,105,0.12); color: var(--green); }
+  .badge.orange { background: rgba(217,119,6,0.12); color: var(--orange); }
+  .badge.red { background: rgba(220,38,38,0.12); color: var(--red); }
+  .badge.purple { background: rgba(109,40,217,0.12); color: var(--accent2); }
+  .badge.cyan { background: rgba(8,145,178,0.12); color: var(--cyan); }
+
+  ul, ol { padding-left: 24px; margin: 8px 0; }
+  li { margin: 4px 0; }
+
+  h2[id]::before {
+    content: '';
+    display: block;
+    height: 80px;
+    margin-top: -80px;
+    visibility: hidden;
+  }
+
+  .footer {
+    text-align: center;
+    padding: 32px 0;
+    color: var(--text-dim);
+    font-size: 0.85em;
+    border-top: 1px solid var(--border);
+  }
+
+  .file-tag {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 8px;
+    font-size: 0.82em;
+    font-family: monospace;
+    color: var(--accent);
+    margin-left: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Zephyr net_buf 网络缓冲区</h1>
+  <p class="subtitle">源码深度剖析与完整使用指南 — 涵盖内存池、引用计数、碎片链、零拷贝数据操作</p>
+  <span class="version">Zephyr RTOS &bull; lib/net_buf/ &bull; include/zephyr/net_buf.h</span>
+</div>
+
+<div class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#overview">设计动机与核心思想</a></li>
+    <li><a href="#directory">源码文件组织</a></li>
+    <li><a href="#simple">net_buf_simple — 轻量缓冲区</a></li>
+    <li><a href="#netbuf">net_buf — 完整网络缓冲区</a></li>
+    <li><a href="#pool">net_buf_pool — 内存池管理</a></li>
+    <li><a href="#data-alloc">数据区分配策略 (FIXED / VAR / HEAP)</a></li>
+    <li><a href="#pool-define">池定义宏详解</a></li>
+    <li><a href="#alloc-flow">分配与释放流程</a></li>
+    <li><a href="#refcount">引用计数与克隆</a></li>
+    <li><a href="#data-ops">数据操作 API 全解</a></li>
+    <li><a href="#fragments">碎片链 (Fragment Chain)</a></li>
+    <li><a href="#userdata">user_data 元数据</a></li>
+    <li><a href="#state">解析状态保存与恢复</a></li>
+    <li><a href="#thread-safety">线程安全与同步</a></li>
+    <li><a href="#examples">完整使用示例</a></li>
+    <li><a href="#architecture">架构总览</a></li>
+  </ol>
+</div>
+
+<div class="content">
+
+<!-- ================================================================ -->
+<h2 id="overview"><span class="num">01</span>设计动机与核心思想</h2>
+
+<p>
+  在网络协议栈中，数据包在协议层之间传递时，每层可能添加或移除头部/尾部。
+  如果每次都复制整个数据包，性能开销巨大。Zephyr 的 <code>net_buf</code> 借鉴了 Linux
+  <code>sk_buff</code> 的设计思想，但更轻量：
+</p>
+
+<table>
+  <tr><th>设计目标</th><th>实现方式</th></tr>
+  <tr><td><b>零拷贝头部操作</b></td><td>通过移动 <code>data</code> 指针而非移动数据实现 push/pull</td></tr>
+  <tr><td><b>安全共享</b></td><td>引用计数，多个消费者共享同一 buffer</td></tr>
+  <tr><td><b>大包支持</b></td><td>碎片链，多个小 buffer 链式组成大包</td></tr>
+  <tr><td><b>无碎片分配</b></td><td>池化预分配，避免运行时 heap 碎片</td></tr>
+  <tr><td><b>协议元数据</b></td><td><code>user_data</code> 柔性数组，零成本携带上下文</td></tr>
+  <tr><td><b>灵活数据源</b></td><td>支持外部数据、固定池、变长池、堆分配</td></tr>
+</table>
+
+<div class="callout info">
+  <strong>net_buf 的使用者</strong>
+  Zephyr 中以下子系统大量使用 net_buf：
+  <ul>
+    <li>Bluetooth (HCI, ATT, L2CAP, SMP)</li>
+    <li>网络协议栈 (IPv4/IPv6, TCP, UDP, CoAP)</li>
+    <li>USB 设备栈 (device_next)</li>
+    <li>CAN 总线</li>
+    <li>Modbus、COBS 等工具库</li>
+  </ul>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="directory"><span class="num">02</span>源码文件组织</h2>
+
+<pre>
+include/zephyr/net_buf.h          <span class="cm"># 公共 API 头文件（~1800 行）</span>
+lib/net_buf/
+├── buf.c                         <span class="cm"># 核心实现：池分配、引用计数、碎片链（~750 行）</span>
+└── buf_simple.c                  <span class="cm"># 简单缓冲区：add/push/pull/remove 操作（~610 行）</span>
+</pre>
+
+<p>
+  头文件通过 <code>static inline</code> 实现了大量辅助函数和包装宏，
+  真正的 .c 文件非常精简。
+</p>
+
+<!-- ================================================================ -->
+<h2 id="simple"><span class="num">03</span>net_buf_simple — 轻量缓冲区</h2>
+
+<p>
+  <code>net_buf_simple</code> 是最基础的缓冲区表示，仅 16 字节（32 位系统），
+  不含引用计数、碎片链、内存池关联。
+</p>
+
+<h3>3.1 结构体定义 <span class="file-tag">net_buf.h:89</span></h3>
+<pre>
+struct net_buf_simple {
+    uint8_t *data;      <span class="cm">// 有效数据起始指针（可前后移动）</span>
+    uint16_t len;       <span class="cm">// 有效数据长度</span>
+    uint16_t size;      <span class="cm">// 存储区总容量</span>
+    uint8_t *__buf;     <span class="cm">// 存储区基地址（固定不变）</span>
+};
+</pre>
+
+<h3>3.2 内存布局</h3>
+<div class="diagram">
+<pre>
+  __buf                data                          data + len
+    │                   │                               │
+    ▼                   ▼                               ▼
+    ├─── headroom ──────┤──────── data ─────────────────┤──── tailroom ────┤
+    │                   │◄──── len ────►│               │                 │
+    │                   │                               │                 │
+    └───────────────────┴───────────────────────────────┴─────────────────┘
+    ◄──────────────────────── size ──────────────────────────────────────►
+
+  headroom = data - __buf                  （已预留/已 pull 的空间）
+  tailroom = size - headroom - len          （可 add 的空间）
+  max_len  = size - headroom               （当前 data 后最大可用长度）
+</pre>
+</div>
+
+<h3>3.3 关键特征</h3>
+<ul>
+  <li><b>无引用计数</b>：生命周期由调用者管理</li>
+  <li><b>无内存池</b>：通常在栈上或静态分配</li>
+  <li><b>无碎片链</b>：单缓冲区</li>
+  <li><b>与 net_buf ABI 兼容</b>：net_buf 通过 union 包含 net_buf_simple</li>
+</ul>
+
+<h3>3.4 栈分配宏</h3>
+<pre>
+<span class="cm">// 在栈上定义一个 128 字节的 net_buf_simple</span>
+NET_BUF_SIMPLE_DEFINE(my_buf, 128);
+
+<span class="cm">// 带初始化的栈分配（可指定 reserve_head）</span>
+struct net_buf_simple *buf = NET_BUF_SIMPLE(64);
+net_buf_simple_init(buf, 4);   <span class="cm">// 预留 4 字节 headroom</span>
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="netbuf"><span class="num">04</span>net_buf — 完整网络缓冲区</h2>
+
+<h3>4.1 结构体定义 <span class="file-tag">net_buf.h:1015</span></h3>
+<pre>
+struct net_buf {
+    sys_snode_t   node;           <span class="cm">// 链表节点（用于 FIFO/SList 传递）</span>
+    struct net_buf *frags;        <span class="cm">// 碎片链：指向下一个 fragment</span>
+    uint8_t        ref;           <span class="cm">// 引用计数（1 = 独占）</span>
+    uint8_t        flags;         <span class="cm">// 标志位（NET_BUF_EXTERNAL_DATA 等）</span>
+    uint8_t        pool_id;       <span class="cm">// 所属内存池 ID</span>
+    uint8_t        user_data_size;<span class="cm">// user_data 长度</span>
+
+    union {                       <span class="cm">// 与 net_buf_simple ABI 兼容</span>
+        struct {
+            uint8_t  *data;       <span class="cm">// 有效数据起始</span>
+            uint16_t  len;        <span class="cm">// 有效数据长度</span>
+            uint16_t  size;       <span class="cm">// 数据区容量</span>
+            uint8_t  *__buf;      <span class="cm">// 数据区基地址</span>
+        };
+        struct net_buf_simple b;  <span class="cm">// 作为 net_buf_simple 访问</span>
+    };
+
+    uint8_t user_data[] __net_buf_align; <span class="cm">// 柔性数组：协议元数据</span>
+};
+</pre>
+
+<h3>4.2 完整内存布局</h3>
+<div class="diagram">
+<pre>
+┌─────────────── net_buf 结构体 ───────────────┬──── user_data ────┐
+│ node │ frags │ ref │ flags │ pool_id │ ud_sz │  data │ len │ size │ __buf │  ud[0..N]  │
+│(slist│ ptr   │ u8 │  u8   │   u8    │  u8   │  u8*  │ u16 │ u16  │  u8*  │ (对齐填充) │
+│  8B  │  4B   │ 1B │  1B   │   1B   │  1B   │       │     │      │       │            │
+├───────────────────────────────────────────────┴──────────────────┤
+│                      ← net_buf 结构体部分 →                      │
+└─────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──── 数据区（由池分配策略管理）──────────────────────────────────┐
+│  __buf                data                    data + len       │
+│    │                   │                         │              │
+│    ├─── headroom ──────┤──── data ───────────────┤── tailroom ──┤
+│    │                   │◄─── len ──►│            │              │
+│    └───────────────────┴────────────────────────┴──────────────┘
+│    ◄──────────────────── size ────────────────────────────────► │
+└────────────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="pool"><span class="num">05</span>net_buf_pool — 内存池管理</h2>
+
+<h3>5.1 结构体定义 <span class="file-tag">net_buf.h:1088</span></h3>
+<pre>
+struct net_buf_pool {
+    struct k_lifo    free;              <span class="cm">// 空闲 buffer 的 LIFO 队列</span>
+    struct k_spinlock lock;             <span class="cm">// 并发保护自旋锁</span>
+    const uint16_t   buf_count;         <span class="cm">// 池中 buffer 总数</span>
+    uint16_t         uninit_count;      <span class="cm">// 未初始化 buffer 数（惰性初始化）</span>
+    uint8_t          user_data_size;    <span class="cm">// 每个 buffer 的 user_data 大小</span>
+<span class="cm">#if defined(CONFIG_NET_BUF_POOL_USAGE)</span>
+    atomic_t         avail_count;       <span class="cm">// 当前可用数量</span>
+    const uint16_t   pool_size;         <span class="cm">// 池总大小（调试用）</span>
+    uint16_t         max_used;          <span class="cm">// 历史最大使用数</span>
+    const char      *name;              <span class="cm">// 池名称（日志用）</span>
+<span class="cm">#endif</span>
+    void (*const destroy)(struct net_buf *); <span class="cm">// 可选销毁回调</span>
+    const struct net_buf_data_alloc *alloc;  <span class="cm">// 数据区分配策略</span>
+    struct net_buf * const __bufs;           <span class="cm">// net_buf 结构数组</span>
+};
+</pre>
+
+<h3>5.2 惰性初始化</h3>
+<p>
+  池创建时 <code>uninit_count = buf_count</code>，所有 buffer 尚未初始化。
+  首次分配时按需从 <code>__bufs</code> 数组中取出并初始化，避免启动时全部构造。
+</p>
+<pre>
+<span class="cm">// buf.c:72 — 惰性取 buffer</span>
+static inline struct net_buf *pool_get_uninit(struct net_buf_pool *pool,
+                                              uint16_t uninit_count)
+{
+    size_t struct_size = ROUND_UP(sizeof(struct net_buf) + pool->user_data_size,
+                                  __alignof__(struct net_buf));
+    size_t byte_offset = (pool->buf_count - uninit_count) * struct_size;
+    struct net_buf *buf = (struct net_buf *)(((uint8_t *)pool->__bufs) + byte_offset);
+
+    buf->pool_id = pool_id(pool);
+    buf->user_data_size = pool->user_data_size;
+    return buf;
+}
+</pre>
+
+<div class="callout tip">
+  <strong>两次尝试优化</strong>
+  分配时，如果池中有未初始化 buffer 但 LIFO 中可能有之前归还的 buffer，
+  会先尝试 K_NO_WAIT 从 LIFO 取（更快），取不到再用未初始化 buffer。
+  这避免了不必要的初始化开销。
+  <span class="file-tag">buf.c:276</span>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="data-alloc"><span class="num">06</span>数据区分配策略 (FIXED / VAR / HEAP)</h2>
+
+<p>
+  每个 buffer 的数据区（存放实际 payload 的区域）由独立的分配策略管理，
+  通过 <code>net_buf_data_cb</code> 和 <code>net_buf_data_alloc</code> 抽象。
+</p>
+
+<h3>6.1 回调接口 <span class="file-tag">net_buf.h:1067</span></h3>
+<pre>
+struct net_buf_data_cb {
+    uint8_t* (*alloc)(struct net_buf *buf, size_t *size, k_timeout_t timeout);
+    uint8_t* (*ref)(struct net_buf *buf, uint8_t *data);   <span class="cm">// 可选</span>
+    void     (*unref)(struct net_buf *buf, uint8_t *data);
+};
+
+struct net_buf_data_alloc {
+    const struct net_buf_data_cb *cb;
+    void  *alloc_data;       <span class="cm">// 池/堆指针</span>
+    size_t max_alloc_size;    <span class="cm">// 最大分配大小（0 = 无限制）</span>
+    size_t alignment;         <span class="cm">// 对齐要求（0 = 默认）</span>
+};
+</pre>
+
+<h3>6.2 三种策略对比</h3>
+<table>
+  <tr>
+    <th>特性</th>
+    <th><span class="badge blue">FIXED</span></th>
+    <th><span class="badge green">VAR</span></th>
+    <th><span class="badge orange">HEAP</span></th>
+  </tr>
+  <tr><td>数据来源</td><td>预分配字节数组</td><td>k_heap 动态分配</td><td>k_malloc 堆分配</td></tr>
+  <tr><td>数据大小</td><td>固定（max_alloc_size）</td><td>变长（≤池总量）</td><td>变长（≤堆总量）</td></tr>
+  <tr><td>引用计数 (ref cb)</td><td><span class="badge red">不支持</span></td><td><span class="badge green">支持</span></td><td><span class="badge green">支持</span></td></tr>
+  <tr><td>阻塞等待</td><td>不支持（K_NO_WAIT）</td><td>支持</td><td>不支持</td></tr>
+  <tr><td>内存碎片</td><td>无</td><td>堆内可能</td><td>系统堆可能</td></tr>
+  <tr><td>典型用途</td><td>BT HCI、USB</td><td>网络协议栈</td><td>通用</td></tr>
+</table>
+
+<h3>6.3 FIXED 策略实现 <span class="file-tag">buf.c:165</span></h3>
+<pre>
+<span class="cm">// 直接按 buffer 索引计算数据区偏移，O(1) 分配</span>
+static uint8_t *fixed_data_alloc(struct net_buf *buf, size_t *size, k_timeout_t timeout)
+{
+    struct net_buf_pool *pool = net_buf_pool_get(buf->pool_id);
+    const struct net_buf_pool_fixed *fixed = pool->alloc->alloc_data;
+
+    *size = pool->alloc->max_alloc_size;
+    return fixed->data_pool + *size * net_buf_id(buf);
+}
+</pre>
+
+<h3>6.4 VAR/HEAP 策略 — 引用计数隐藏在数据前</h3>
+<div class="diagram">
+<pre>
+  VAR/HEAP 数据区内存布局:
+
+  ┌─────────┬─────────────────────────────────────────────────┐
+  │ref_count│              data payload                       │
+  │ (1 字节) │              (size 字节)                        │
+  └─────────┴─────────────────────────────────────────────────┘
+  ▲         ▲
+  │         │
+  │         └── __buf = ref_count + GET_ALIGN(pool)
+  │              data 指向此区域内的某个位置
+  │
+  └── 对齐到 sizeof(void*) 或 pool->alignment
+
+  clone 时: data_ref() 递增 ref_count，共享同一数据区
+  unref 时: ref_count--，到 0 时 k_heap_free / k_free
+</pre>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="pool-define"><span class="num">07</span>池定义宏详解</h2>
+
+<h3>7.1 NET_BUF_POOL_DEFINE — 通用（实际是 FIXED）</h3>
+<pre>
+<span class="cm">// 最常用的定义方式，内部展开为 NET_BUF_POOL_FIXED_DEFINE</span>
+NET_BUF_POOL_DEFINE(my_pool, <span class="num">16</span>, <span class="num">128</span>, <span class="num">0</span>, NULL);
+<span class="cm">//                  名称     数量  数据大小  user_data大小  destroy回调</span>
+</pre>
+
+<h3>7.2 NET_BUF_POOL_FIXED_DEFINE <span class="file-tag">net_buf.h:1235</span></h3>
+<p>展开后的静态分配：</p>
+<pre>
+<span class="cm">// 1. net_buf 结构体数组（__noinit，不占 .bss 初始化时间）</span>
+static struct _net_buf_my_pool _net_buf_my_pool[16] __noinit;
+
+<span class="cm">// 2. 数据区字节数组</span>
+static uint8_t __noinit net_buf_data_my_pool[16][128] __aligned(sizeof(void *));
+
+<span class="cm">// 3. 固定分配描述符</span>
+static const struct net_buf_pool_fixed net_buf_fixed_my_pool = {
+    .data_pool = (uint8_t *)net_buf_data_my_pool,
+};
+
+<span class="cm">// 4. 数据分配器</span>
+static const struct net_buf_data_alloc net_buf_fixed_alloc_my_pool = {
+    .cb = &net_buf_fixed_cb,
+    .alloc_data = &net_buf_fixed_my_pool,
+    .max_alloc_size = 128,
+};
+
+<span class="cm">// 5. 池结构体（放入 linker iterable section）</span>
+static STRUCT_SECTION_ITERABLE(net_buf_pool, my_pool) = {
+    .free = Z_LIFO_INITIALIZER(my_pool.free),
+    .buf_count = 16,
+    .uninit_count = 16,         <span class="cm">// 全部待惰性初始化</span>
+    .user_data_size = 0,
+    .destroy = NULL,
+    .alloc = &net_buf_fixed_alloc_my_pool,
+    .__bufs = (struct net_buf *)_net_buf_my_pool,
+};
+</pre>
+
+<h3>7.3 NET_BUF_POOL_VAR_DEFINE</h3>
+<pre>
+NET_BUF_POOL_VAR_DEFINE(var_pool, 8, 4096, sizeof(struct my_ud), NULL);
+<span class="cm">//                     名称     数量 总数据量  user_data大小</span>
+
+<span class="cm">// 展开后额外创建一个 k_heap：</span>
+K_HEAP_DEFINE(net_buf_mem_pool_var_pool, 4096);
+</pre>
+
+<h3>7.4 NET_BUF_POOL_HEAP_DEFINE</h3>
+<pre>
+NET_BUF_POOL_HEAP_DEFINE(heap_pool, 4, sizeof(struct my_ud), NULL);
+
+<span class="cm">// 使用全局 net_buf_heap_alloc（基于 k_malloc）</span>
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="alloc-flow"><span class="num">08</span>分配与释放流程</h2>
+
+<h3>8.1 完整分配流程 <span class="file-tag">buf.c:252</span></h3>
+<div class="diagram">
+<pre>
+net_buf_alloc_fixed(pool, timeout)
+  │
+  └─ net_buf_alloc_len(pool, max_alloc_size, timeout)
+       │
+       ├─ 1. k_spin_lock(&pool->lock)
+       │
+       ├─ 2. 有未初始化 buffer？ (uninit_count > 0)
+       │     ├─ YES:
+       │     │    ├─ 非首次？→ 尝试 k_lifo_get(&pool->free, K_NO_WAIT)
+       │     │    │    ├─ 成功 → 跳到 success
+       │     │    │    └─ 失败 → uninit_count--, pool_get_uninit()
+       │     │    └─ 跳到 success
+       │     │
+       │     └─ NO:
+       │          k_spin_unlock
+       │          buf = k_lifo_get(&pool->free, timeout)
+       │          └─ 失败 → return NULL
+       │
+       ├─ 3. success:
+       │     ├─ data_alloc(buf, &size, timeout)      <span class="cm"># 调用池的 alloc 回调</span>
+       │     │    └─ 失败 → net_buf_destroy(buf), return NULL
+       │     ├─ buf->ref = 1
+       │     ├─ buf->frags = NULL
+       │     ├─ buf->flags = 0
+       │     ├─ memset(buf->user_data, 0, ...)
+       │     ├─ buf->data = buf->__buf               <span class="cm"># data 指向存储区起始</span>
+       │     └─ buf->len = 0
+       │
+       ├─ 4. [调试] 更新 avail_count, max_used
+       │
+       └─ return buf
+</pre>
+</div>
+
+<h3>8.2 释放流程 <span class="file-tag">buf.c:440</span></h3>
+<div class="diagram">
+<pre>
+net_buf_unref(buf)
+  │
+  ├─ assert(buf->ref > 0)       <span class="cm"># 检测 double free</span>
+  │
+  ├─ if (--buf->ref > 0)        <span class="cm"># 引用计数仍 > 0</span>
+  │    └─ return                <span class="cm"># 不释放</span>
+  │
+  ├─ buf->data = NULL
+  ├─ buf->frags = NULL
+  │
+  ├─ pool->destroy ?            <span class="cm"># 有自定义销毁回调？</span>
+  │    ├─ pool->destroy(buf)    <span class="cm"># 由回调负责调 net_buf_destroy()</span>
+  │    └─ net_buf_destroy(buf)  <span class="cm"># 归还到 pool->free LIFO</span>
+  │
+  └─ buf = frags                <span class="cm"># 继续释放碎片链中的下一个 fragment!</span>
+       └─ 循环...
+</pre>
+</div>
+
+<div class="callout warn">
+  <strong>unref 自动释放碎片链</strong>
+  <code>net_buf_unref()</code> 会沿着 <code>frags</code> 链自动释放所有 fragment。
+  无需手动逐个释放碎片。但这也意味着如果某个 fragment 被 <code>net_buf_ref()</code> 增加了引用，
+  它的 ref > 0 不会被释放，只有 ref 降到 0 的 buffer 才归还池。
+</div>
+
+<!-- ================================================================ -->
+<h2 id="refcount"><span class="num">09</span>引用计数与克隆</h2>
+
+<h3>9.1 引用计数 <span class="file-tag">buf.c:484</span></h3>
+<pre>
+<span class="cm">// 增加引用（返回 buf 本身，方便链式调用）</span>
+struct net_buf *net_buf_ref(struct net_buf *buf) {
+    buf->ref++;
+    return buf;
+}
+</pre>
+
+<p>典型场景：数据包需要同时交给多个模块处理。</p>
+
+<h3>9.2 克隆 <span class="file-tag">buf.c:494</span></h3>
+<pre>
+struct net_buf *net_buf_clone(struct net_buf *buf, k_timeout_t timeout);
+</pre>
+
+<p>克隆行为取决于池的数据分配策略：</p>
+<div class="diagram">
+<pre>
+pool->alloc->cb->ref 是否存在？ (VAR / HEAP)
+│
+├─ YES (有 ref callback):
+│    ├─ clone->__buf = data_ref(buf, buf->__buf)     <span class="cm"># 数据区引用计数 +1</span>
+│    ├─ clone->data = buf->data                       <span class="cm"># 共享同一数据区</span>
+│    ├─ clone->len = buf->len
+│    ├─ clone->size = buf->size
+│    └─ memcpy(clone->user_data, buf->user_data, ...) <span class="cm"># 复制元数据</span>
+│
+└─ NO (FIXED, 无 ref callback):
+     ├─ clone->__buf = data_alloc(clone, &size, ...)  <span class="cm"># 新分配数据区</span>
+     ├─ clone->data = clone->__buf + headroom(buf)     <span class="cm"># 保持相同偏移</span>
+     ├─ net_buf_add_mem(clone, buf->data, buf->len)    <span class="cm"># 完整数据拷贝</span>
+     └─ memcpy(clone->user_data, buf->user_data, ...)  <span class="cm"># 复制元数据</span>
+</pre>
+</div>
+
+<div class="callout info">
+  <strong>所有权规则</strong>
+  <code>net_buf_clone()</code> 返回的新 buffer 与原 buffer 完全独立。
+  两者各自 <code>unref()</code>，互不影响。
+  对于 VAR/HEAP 池，数据区共享但引用计数保护了生命周期。
+</div>
+
+<h3>9.3 外部数据 buffer</h3>
+<pre>
+<span class="cm">// 创建引用外部数据的 buffer（不拥有数据）</span>
+struct net_buf *buf = net_buf_alloc_with_data(pool, ext_data, ext_len, K_FOREVER);
+<span class="cm">// buf->flags = NET_BUF_EXTERNAL_DATA</span>
+<span class="cm">// unref 时不释放外部数据，仅归还 net_buf 结构</span>
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="data-ops"><span class="num">10</span>数据操作 API 全解</h2>
+
+<h3>10.1 操作概念图</h3>
+<div class="diagram">
+<pre>
+                  ◄──── push() / push_mem() ────
+                  │    data 指针左移，len 增大
+                  │
+  __buf       data                        data + len
+    │           │                              │
+    ▼           ▼                              ▼
+    ├ headroom ─┼──────── data ────────────────┤── tailroom ──┤
+    │           │◄────── len ──►│              │              │
+    └───────────┴──────────────────────────────┴──────────────┘
+                                    │
+                                    │    pull() / pull_mem()
+                                    ────► data 指针右移，len 减小
+
+    add_mem() ──► 尾部追加数据，len 增大
+    remove_mem() ──► 尾部移除数据，len 减小
+</pre>
+</div>
+
+<h3>10.2 完整 API 列表</h3>
+
+<h4>尾部追加 (Add)</h4>
+<table>
+  <tr><th>函数</th><th>说明</th><th>效果</th></tr>
+  <tr><td><code>net_buf_add(buf, len)</code></td><td>预留尾部空间</td><td>len += len，返回尾部指针</td></tr>
+  <tr><td><code>net_buf_add_mem(buf, mem, len)</code></td><td>追加数据</td><td>memcpy 到尾部</td></tr>
+  <tr><td><code>net_buf_add_u8(buf, val)</code></td><td>追加 uint8</td><td>返回写入位置指针</td></tr>
+  <tr><td><code>net_buf_add_le16 / be16</code></td><td>追加 16 位</td><td>小端/大端字节序</td></tr>
+  <tr><td><code>net_buf_add_le24 / be24</code></td><td>追加 24 位</td><td>3 字节整型</td></tr>
+  <tr><td><code>net_buf_add_le32 / be32</code></td><td>追加 32 位</td><td>4 字节整型</td></tr>
+  <tr><td><code>net_buf_add_le40 / be40</code></td><td>追加 40 位</td><td>5 字节整型</td></tr>
+  <tr><td><code>net_buf_add_le48 / be48</code></td><td>追加 48 位</td><td>6 字节整型</td></tr>
+  <tr><td><code>net_buf_add_le64 / be64</code></td><td>追加 64 位</td><td>8 字节整型</td></tr>
+</table>
+
+<h4>头部插入 (Push)</h4>
+<table>
+  <tr><th>函数</th><th>说明</th><th>效果</th></tr>
+  <tr><td><code>net_buf_push(buf, len)</code></td><td>头部预留空间</td><td>data -= len, len += len</td></tr>
+  <tr><td><code>net_buf_push_mem(buf, mem, len)</code></td><td>头部插入数据</td><td>data 左移后 memcpy</td></tr>
+  <tr><td><code>net_buf_push_u8(buf, val)</code></td><td>头部插入 uint8</td><td>data[-1] = val</td></tr>
+  <tr><td><code>net_buf_push_le16 / be16</code></td><td>头部插入 16 位</td><td>利用 headroom</td></tr>
+  <tr><td><code>net_buf_push_le24 / be24</code></td><td>头部插入 24 位</td><td>3 字节</td></tr>
+  <tr><td><code>net_buf_push_le32 / be32</code></td><td>头部插入 32 位</td><td>4 字节</td></tr>
+  <tr><td><code>net_buf_push_le40..be64</code></td><td>头部插入 40/48/64 位</td><td>5/6/8 字节</td></tr>
+</table>
+
+<h4>头部移除 (Pull)</h4>
+<table>
+  <tr><th>函数</th><th>说明</th><th>返回值</th></tr>
+  <tr><td><code>net_buf_pull(buf, len)</code></td><td>跳过头部 len 字节</td><td>原 data 指针</td></tr>
+  <tr><td><code>net_buf_pull_mem(buf, len)</code></td><td>跳过并返回头部数据</td><td>原 data 指针</td></tr>
+  <tr><td><code>net_buf_pull_u8(buf)</code></td><td>读取并移除 uint8</td><td>val</td></tr>
+  <tr><td><code>net_buf_pull_le16 / be16</code></td><td>读取并移除 16 位</td><td>val</td></tr>
+  <tr><td><code>net_buf_pull_le24 / be24</code></td><td>读取并移除 24 位</td><td>val</td></tr>
+  <tr><td><code>net_buf_pull_le32 / be32</code></td><td>读取并移除 32 位</td><td>val</td></tr>
+  <tr><td><code>net_buf_pull_le40..be64</code></td><td>读取并移除 40/48/64 位</td><td>val</td></tr>
+</table>
+
+<h4>尾部移除 (Remove)</h4>
+<table>
+  <tr><th>函数</th><th>说明</th></tr>
+  <tr><td><code>net_buf_remove_mem(buf, len)</code></td><td>移除尾部 len 字节</td></tr>
+  <tr><td><code>net_buf_remove_u8(buf)</code></td><td>移除并返回尾部 uint8</td></tr>
+  <tr><td><code>net_buf_remove_le16 / be16</code></td><td>移除并返回尾部 16 位</td></tr>
+  <tr><td><code>net_buf_remove_le24..be64</code></td><td>移除并返回尾部整型</td></tr>
+</table>
+
+<h4>查询与重置</h4>
+<table>
+  <tr><th>函数</th><th>计算方式</th></tr>
+  <tr><td><code>net_buf_headroom(buf)</code></td><td>data - __buf</td></tr>
+  <tr><td><code>net_buf_tailroom(buf)</code></td><td>size - headroom - len</td></tr>
+  <tr><td><code>net_buf_tail(buf)</code></td><td>data + len（尾部指针）</td></tr>
+  <tr><td><code>net_buf_max_len(buf)</code></td><td>size - headroom（最大可用长度）</td></tr>
+  <tr><td><code>net_buf_reset(buf)</code></td><td>data = __buf, len = 0</td></tr>
+</table>
+
+<!-- ================================================================ -->
+<h2 id="fragments"><span class="num">11</span>碎片链 (Fragment Chain)</h2>
+
+<p>
+  当数据包超过单个 buffer 容量时，使用碎片链。每个 <code>net_buf</code> 的
+  <code>frags</code> 指针指向下一个 fragment，形成单向链表。
+</p>
+
+<h3>11.1 链式结构</h3>
+<div class="diagram">
+<pre>
+net_buf (head)                   net_buf (frag 1)              net_buf (frag 2)
+┌──────────────────┐             ┌──────────────────┐          ┌──────────────────┐
+│ node             │             │ node             │          │ node             │
+│ frags ────────────────────────►│ frags ──────────────────────►│ frags = NULL    │
+│ ref = 2          │             │ ref = 1          │          │ ref = 1          │
+│ pool_id          │             │ pool_id          │          │ pool_id          │
+│ ┌──────────────┐ │             │ ┌──────────────┐ │          │ ┌──────────────┐ │
+│ │data          │ │             │ │data          │ │          │ │data          │ │
+│ │len = 64      │ │             │ │len = 128     │ │          │ │len = 32      │ │
+│ │size = 128    │ │             │ │size = 128    │ │          │ │size = 64     │ │
+│ │__buf         │ │             │ │__buf         │ │          │ │__buf         │ │
+│ └──────────────┘ │             │ └──────────────┘ │          │ └──────────────┘ │
+│ user_data[]      │             │ user_data[]      │          │ user_data[]      │
+└──────────────────┘             └──────────────────┘          └──────────────────┘
+   总数据 = 64 + 128 + 32 = 224 字节
+</pre>
+</div>
+
+<h3>11.2 碎片操作 API</h3>
+
+<table>
+  <tr><th>函数</th><th>说明</th><th>源码位置</th></tr>
+  <tr>
+    <td><code>net_buf_frag_last(head)</code></td>
+    <td>遍历 frags 链找到最后一个 fragment</td>
+    <td><span class="file-tag">buf.c:559</span></td>
+  </tr>
+  <tr>
+    <td><code>net_buf_frag_add(head, frag)</code></td>
+    <td>在链尾添加 fragment（自动 ref）</td>
+    <td><span class="file-tag">buf.c:582</span></td>
+  </tr>
+  <tr>
+    <td><code>net_buf_frag_insert(parent, frag)</code></td>
+    <td>在 parent 后插入 fragment（接管后续链）</td>
+    <td><span class="file-tag">buf.c:570</span></td>
+  </tr>
+  <tr>
+    <td><code>net_buf_frag_del(parent, frag)</code></td>
+    <td>删除 fragment（自动 unref）</td>
+    <td><span class="file-tag">buf.c:600</span></td>
+  </tr>
+</table>
+
+<h3>11.3 自动碎片创建 — net_buf_append_bytes <span class="file-tag">buf.c:666</span></h3>
+<pre>
+<span class="cm">// 追加超过单个 buffer 容量的数据，自动创建碎片</span>
+size_t net_buf_append_bytes(struct net_buf *buf, size_t len,
+                            const void *value, k_timeout_t timeout,
+                            net_buf_allocator_cb allocate_cb, void *user_data)
+{
+    struct net_buf *frag = net_buf_frag_last(buf);
+
+    do {
+        <span class="cm">// 1. 填满当前 fragment 的 tailroom</span>
+        uint16_t count = min(len, net_buf_tailroom(frag));
+        net_buf_add_mem(frag, value8, count);
+        len -= count;
+
+        if (len == 0) return added_len;
+
+        <span class="cm">// 2. 从同一池分配新 fragment</span>
+        frag = net_buf_alloc_len(pool, min(len, max_size), timeout);
+        net_buf_frag_add(buf, frag);   <span class="cm">// 挂到链尾</span>
+    } while (1);
+}
+</pre>
+
+<h3>11.4 碎片链线性化 — net_buf_linearize <span class="file-tag">buf.c:626</span></h3>
+<pre>
+<span class="cm">// 将碎片链复制到连续内存</span>
+size_t net_buf_linearize(void *dst, size_t dst_len,
+                         const struct net_buf *src,
+                         size_t offset, size_t len)
+{
+    <span class="cm">// 1. 跳过 offset 字节找到起始 fragment</span>
+    while (frag && offset >= frag->len) {
+        offset -= frag->len;
+        frag = frag->frags;
+    }
+
+    <span class="cm">// 2. 逐 fragment 拷贝</span>
+    while (frag && len > 0) {
+        to_copy = min(len, frag->len - offset);
+        memcpy(dst + copied, frag->data + offset, to_copy);
+        copied += to_copy;
+        len -= to_copy;
+        frag = frag->frags;
+        offset = 0;
+    }
+    return copied;
+}
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="userdata"><span class="num">12</span>user_data 元数据</h2>
+
+<p>
+  每个 buffer 尾部的 <code>user_data[]</code> 柔性数组用于存放协议相关的元数据。
+  大小在池定义时确定，分配时自动清零。
+</p>
+
+<pre>
+<span class="cm">// 定义自定义 user_data</span>
+struct bt_l2cap_chan;   <span class="cm">// 前向声明</span>
+
+struct bt_acl_ud {
+    struct bt_l2cap_chan *chan;   <span class="cm">// L2CAP 通道</span>
+    uint8_t  att_type;           <span class="cm">// ATT 操作类型</span>
+    uint16_t acl_id;             <span class="cm">// ACL 连接 ID</span>
+};
+
+<span class="cm">// 创建池时指定 user_data 大小</span>
+NET_BUF_POOL_DEFINE(acl_pool, 8, 256, sizeof(struct bt_acl_ud), NULL);
+
+<span class="cm">// 分配后访问</span>
+struct net_buf *buf = net_buf_alloc_fixed(&acl_pool, K_FOREVER);
+struct bt_acl_ud *ud = net_buf_user_data(buf);
+ud->chan = my_chan;
+ud->att_type = BT_ATT_WRITE_CMD;
+
+<span class="cm">// net_buf_user_data() 是一个简单的宏：</span>
+<span class="cm">#define net_buf_user_data(buf) ((void *)(buf)->user_data)</span>
+</pre>
+
+<div class="callout info">
+  <strong>内存对齐</strong>
+  <code>user_data[]</code> 带有 <code>__net_buf_align</code> 属性
+  （默认 <code>__aligned(sizeof(void*))</code>），确保结构体指针正确对齐。
+  定义池时用 <code>BUILD_ASSERT</code> 验证偏移和大小。
+</div>
+
+<!-- ================================================================ -->
+<h2 id="state"><span class="num">13</span>解析状态保存与恢复</h2>
+
+<p>
+  <code>net_buf_simple_state</code> 允许临时保存和恢复 buffer 的解析位置。
+  典型场景：协议解析器需要回退到之前的位置。
+</p>
+
+<pre>
+struct net_buf_simple_state {
+    uint16_t offset;   <span class="cm">// data 指针相对于 __buf 的偏移</span>
+    uint16_t len;      <span class="cm">// 当时有效数据长度</span>
+};
+
+<span class="cm">// 使用示例</span>
+struct net_buf_simple_state state;
+
+net_buf_simple_save(&buf->b, &state);    <span class="cm">// 保存当前位置</span>
+
+<span class="cm">// 尝试解析 TLV...</span>
+uint8_t type = net_buf_pull_u8(buf);
+uint16_t length = net_buf_pull_be16(buf);
+
+if (parse_failed) {
+    net_buf_simple_restore(&buf->b, &state); <span class="cm">// 回退到保存位置</span>
+}
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="thread-safety"><span class="num">14</span>线程安全与同步</h2>
+
+<table>
+  <tr><th>保护对象</th><th>同步原语</th><th>说明</th></tr>
+  <tr>
+    <td>池操作（分配/释放）</td>
+    <td><code>k_spinlock</code></td>
+    <td>保护 <code>uninit_count</code> 和 <code>free</code> LIFO</td>
+  </tr>
+  <tr>
+    <td>池 LIFO 队列</td>
+    <td><code>k_lifo</code>（内部自旋锁）</td>
+    <td>支持阻塞等待和超时</td>
+  </tr>
+  <tr>
+    <td>sys_slist 操作</td>
+    <td><code>net_buf_slist_lock</code></td>
+    <td>全局自旋锁保护 <code>net_buf_slist_put/get</code></td>
+  </tr>
+  <tr>
+    <td>引用计数</td>
+    <td>原子性保证</td>
+    <td>单线程内递增/递减，由调用者保证可见性</td>
+  </tr>
+  <tr>
+    <td>可用计数</td>
+    <td><code>atomic_t</code></td>
+    <td><code>avail_count</code> 使用原子操作</td>
+  </tr>
+</table>
+
+<div class="callout warn">
+  <strong>buffer 数据操作的线程安全</strong>
+  <code>net_buf_add/push/pull</code> 等<b>不</b>是线程安全的。
+  同一 buffer 在多线程间共享时，调用者需自行加锁。
+  但通过 FIFO 传递 buffer（<code>net_buf_put/get</code>）是线程安全的。
+</div>
+
+<!-- ================================================================ -->
+<h2 id="examples"><span class="num">15</span>完整使用示例</h2>
+
+<h3>15.1 定义池与基础分配</h3>
+<pre>
+#include &lt;zephyr/net_buf.h&gt;
+
+<span class="cm">/* 1. 定义协议头部 */</span>
+struct proto_hdr {
+    uint8_t  type;
+    uint8_t  seq;
+    uint16_t length;
+} __packed;
+
+<span class="cm">/* 2. 定义 user_data（存放协议上下文）*/</span>
+struct my_ud {
+    struct proto_hdr hdr;
+    uint8_t  priority;
+    uint16_t src_port;
+};
+
+<span class="cm">/* 3. 定义固定大小池：8 个 buffer，每个 256 字节数据区 */</span>
+NET_BUF_POOL_DEFINE(my_pool, 8, 256, sizeof(struct my_ud), NULL);
+
+void example_basic(void)
+{
+    <span class="cm">/* 4. 分配 buffer */</span>
+    struct net_buf *buf = net_buf_alloc_fixed(&my_pool, K_FOREVER);
+
+    <span class="cm">/* 5. 设置 user_data */</span>
+    struct my_ud *ud = net_buf_user_data(buf);
+    ud->hdr.type = 0x01;
+    ud->hdr.seq = 42;
+    ud->priority = 3;
+
+    <span class="cm">/* 6. 追加 payload */</span>
+    uint8_t payload[] = {0xDE, 0xAD, 0xBE, 0xEF};
+    net_buf_add_mem(buf, payload, sizeof(payload));
+    <span class="cm">// buf->len = 4</span>
+
+    <span class="cm">/* 7. 释放 */</span>
+    net_buf_unref(buf);
+}
+</pre>
+
+<h3>15.2 零拷贝协议封装（利用 headroom）</h3>
+<pre>
+void example_protocol_encap(void)
+{
+    struct net_buf *buf = net_buf_alloc_fixed(&my_pool, K_FOREVER);
+
+    <span class="cm">/* Step 1: 先写 payload（填满尾部）*/</span>
+    net_buf_add_mem(buf, app_data, app_data_len);
+
+    <span class="cm">/* Step 2: 传输层头部 — 利用 headroom，零拷贝前插 */</span>
+    net_buf_push_be16(buf, app_data_len);   <span class="cm">// length 字段</span>
+    net_buf_push_u8(buf, 0x01);             <span class="cm">// type 字段</span>
+
+    <span class="cm">/* Step 3: 网络层头部 — 继续利用 headroom */</span>
+    net_buf_push_be16(buf, 0x0800);         <span class="cm">// EtherType</span>
+    net_buf_push_mem(buf, dst_mac, 6);      <span class="cm">// 目标 MAC</span>
+    net_buf_push_mem(buf, src_mac, 6);      <span class="cm">// 源 MAC</span>
+
+    <span class="cm">/* 此时 buf->data 指向 Ethernet 头部</span>
+    <span class="cm">   buf->len = 14 + 3 + app_data_len */</span>
+
+    send_packet(buf);
+    net_buf_unref(buf);
+}
+</pre>
+
+<h3>15.3 接收端逐层剥离</h3>
+<pre>
+void example_protocol_strip(struct net_buf *buf)
+{
+    <span class="cm">/* 剥离 Ethernet 头部 */</span>
+    net_buf_pull_mem(buf, 6);               <span class="cm">// 跳过 src MAC</span>
+    net_buf_pull_mem(buf, 6);               <span class="cm">// 跳过 dst MAC</span>
+    uint16_t ethertype = net_buf_pull_be16(buf);
+
+    <span class="cm">/* 剥离传输层头部 */</span>
+    uint8_t type = net_buf_pull_u8(buf);
+    uint16_t length = net_buf_pull_be16(buf);
+
+    <span class="cm">/* buf->data 现在指向纯 payload */</span>
+    process_payload(buf->data, buf->len);
+}
+</pre>
+
+<h3>15.4 分片处理大数据</h3>
+<pre>
+void example_fragments(void)
+{
+    struct net_buf *head = net_buf_alloc_fixed(&my_pool, K_FOREVER);
+
+    <span class="cm">/* 追加 1024 字节 — 超出单个 buffer 容量，自动创建碎片 */</span>
+    uint8_t big_data[1024];
+    memset(big_data, 0xAA, sizeof(big_data));
+
+    net_buf_append_bytes(head, sizeof(big_data), big_data,
+                         K_FOREVER, NULL, NULL);
+
+    <span class="cm">/* 线性化到连续内存 */</span>
+    uint8_t linear[1024];
+    size_t copied = net_buf_linearize(linear, sizeof(linear),
+                                      head, 0, sizeof(linear));
+    <span class="cm">// copied = 1024</span>
+
+    <span class="cm">/* unref head 会自动释放整个碎片链 */</span>
+    net_buf_unref(head);
+}
+</pre>
+
+<h3>15.5 线程间传递</h3>
+<pre>
+<span class="cm">/* 定义 FIFO */</span>
+K_FIFO_DEFINE(rx_fifo);
+
+<span class="cm">/* 生产者线程 */</span>
+void producer_thread(void)
+{
+    while (1) {
+        struct net_buf *buf = net_buf_alloc_fixed(&my_pool, K_FOREVER);
+        <span class="cm">/* ... 填充数据 ... */</span>
+        net_buf_put(&rx_fifo, buf);    <span class="cm">// 转移所有权，线程安全</span>
+    }
+}
+
+<span class="cm">/* 消费者线程 */</span>
+void consumer_thread(void)
+{
+    while (1) {
+        struct net_buf *buf = net_buf_get(&rx_fifo, K_FOREVER);
+        <span class="cm">/* ... 处理数据 ... */</span>
+        net_buf_unref(buf);            <span class="cm">// 用完释放 */</span>
+    }
+}
+</pre>
+
+<h3>15.6 引用计数共享</h3>
+<pre>
+void example_refcount(void)
+{
+    struct net_buf *buf = net_buf_alloc_fixed(&my_pool, K_FOREVER);
+    net_buf_add_mem(buf, shared_data, len);
+
+    <span class="cm">// 模块 A 和 B 都需要处理这个数据包</span>
+    struct net_buf *buf_a = buf;           <span class="cm">// 原始引用</span>
+    struct net_buf *buf_b = net_buf_ref(buf); <span class="cm">// 增加引用，ref = 2</span>
+
+    <span class="cm">// 模块 A 处理完毕</span>
+    net_buf_unref(buf_a);   <span class="cm">// ref: 2 → 1，不释放</span>
+
+    <span class="cm">// 模块 B 处理完毕</span>
+    net_buf_unref(buf_b);   <span class="cm">// ref: 1 → 0，真正释放回池</span>
+}
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="architecture"><span class="num">16</span>架构总览</h2>
+
+<h3>16.1 分层架构图</h3>
+<div class="diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────────────┐
+│                        应用 / 协议层                                 │
+│  net_buf_add_mem()   net_buf_push_be16()   net_buf_pull_u8()       │
+│  net_buf_append_bytes()   net_buf_linearize()   net_buf_clone()    │
+├─────────────────────────────────────────────────────────────────────┤
+│                     net_buf API 层                                  │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────┐  ┌────────────┐│
+│  │  分配/释放   │  │  引用计数     │  │  碎片链    │  │ user_data  ││
+│  │ alloc_fixed  │  │ ref / unref  │  │ frag_add   │  │ 元数据管理 ││
+│  │ alloc_len    │  │ clone        │  │ frag_del   │  │            ││
+│  │ alloc_with   │  │              │  │ linearize  │  │            ││
+│  │   _data      │  │              │  │            │  │            ││
+│  └──────┬───────┘  └──────┬───────┘  └─────┬──────┘  └────────────┘│
+├─────────┼─────────────────┼────────────────┼────────────────────────┤
+│         │    net_buf_pool 内存池层         │                        │
+│  ┌──────▼───────┐  ┌──────▼──────┐  ┌─────▼──────┐                │
+│  │ FIXED Pool   │  │  VAR Pool   │  │ HEAP Pool  │                │
+│  │ 预分配固定   │  │  k_heap     │  │ k_malloc   │                │
+│  │ 无引用共享   │  │  有引用计数 │  │  有引用计数 │                │
+│  └──────┬───────┘  └──────┬──────┘  └─────┬──────┘                │
+├─────────┼─────────────────┼────────────────┼────────────────────────┤
+│         │    Zephyr 内核原语              │                        │
+│  ┌──────▼───────┐  ┌──────▼──────┐  ┌─────▼──────┐                │
+│  │  k_lifo      │  │  k_heap     │  │  k_malloc  │                │
+│  │  k_spinlock  │  │             │  │            │                │
+│  │  atomic_t    │  │             │  │            │                │
+│  └──────────────┘  └─────────────┘  └────────────┘                │
+└─────────────────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<h3>16.2 数据包生命周期</h3>
+<div class="diagram">
+<pre>
+1. 分配                 2. 协议封装                3. 传递
+net_buf_alloc_fixed()   net_buf_add_mem()          net_buf_put(&fifo, buf)
+  │                       │                         │
+  │  __buf   data         │  push 前插头部           │  FIFO 传递所有权
+  │    ▼      ▼           │  add  后追加数据         │  线程安全
+  │    ├──────┤           │  利用 headroom 零拷贝    │
+  │    │ 空   │           │                          │
+  │    │      │           │    __buf  data           │
+  │    │      │           │      ▼     ▼            │
+  │    └──────┘           │      ├──HDR─┤──DATA──┤  │
+  │  size=256             │      │      │         │  │
+  │  len=0                │      └──────┴─────────┘  │
+  │  ref=1                │      len=32              │
+  └───────────────────────┴──────────────────────────┘
+                                                          │
+4. 接收端剥离              5. 共享(可选)                │
+net_buf_pull_u8()         net_buf_ref(buf)             │
+  │                        │                           │
+  │  pull 后移 data         │  ref: 1 → 2              │
+  │  __buf    data          │  两个模块各持有引用       │
+  │    ▼       ▼            │                          │
+  │    ├──HDR─┤──DATA─┤     │                          ▼
+  │    │      ↑       │     │
+  │    │   headroom   │     │
+  │    └──────┴───────┘     │
+  │           len=28        │
+  └─────────────────────────┘
+                          │
+                          ▼
+6. 释放
+net_buf_unref(buf)
+  │
+  ├─ ref-- > 0 ? → return (不释放)
+  ├─ ref-- = 0 → 归还到 pool->free LIFO
+  └─ 继续释放 frags 碎片链
+</pre>
+</div>
+
+<h3>16.3 设计特征总结</h3>
+
+<table>
+  <tr><th>设计特征</th><th>实现方式</th><th>优势</th></tr>
+  <tr>
+    <td>零拷贝头部操作</td>
+    <td>data 指针移动（push 左移 / pull 右移）</td>
+    <td>协议层封装/解封装无需内存拷贝</td>
+  </tr>
+  <tr>
+    <td>预分配池化</td>
+    <td>编译期静态分配 net_buf 数组 + 数据数组</td>
+    <td>无运行时碎片，确定性延迟</td>
+  </tr>
+  <tr>
+    <td>惰性初始化</td>
+    <td>uninit_count 递减，首次使用才构造</td>
+    <td>加速启动，避免 memset 全池</td>
+  </tr>
+  <tr>
+    <td>引用计数</td>
+    <td>uint8_t ref，net_buf_ref/unref</td>
+    <td>多模块安全共享同一 buffer</td>
+  </tr>
+  <tr>
+    <td>碎片链</td>
+    <td>单向链表 frags 指针</td>
+    <td>支持超过单个 buffer 的大数据包</td>
+  </tr>
+  <tr>
+    <td>灵活数据源</td>
+    <td>FIXED / VAR / HEAP / 外部数据</td>
+    <td>适配不同场景的内存需求</td>
+  </tr>
+  <tr>
+    <td>协议元数据</td>
+    <td>user_data[] 柔性数组</td>
+    <td>零额外指针开销携带上下文</td>
+  </tr>
+  <tr>
+    <td>线程安全传递</td>
+    <td>k_lifo / k_fifo + 自旋锁</td>
+    <td>多线程生产者-消费者模式</td>
+  </tr>
+</table>
+
+<div class="callout info">
+  <strong>代码规模</strong>
+  <ul>
+    <li><code>include/zephyr/net_buf.h</code>: ~1800 行（含 inline 函数和宏）</li>
+    <li><code>lib/net_buf/buf.c</code>: ~750 行（核心实现）</li>
+    <li><code>lib/net_buf/buf_simple.c</code>: ~610 行（简单缓冲区操作）</li>
+    <li><b>总计: ~3160 行</b></li>
+  </ul>
+  精炼但功能完备，是 Zephyr 协议栈的基石组件。
+</div>
+
+</div>
+
+<div class="footer">
+  <p>Zephyr net_buf 网络缓冲区 — 源码深度剖析与使用指南</p>
+  <p>基于 <code>lib/net_buf/</code> + <code>include/zephyr/net_buf.h</code> 源码分析</p>
+  <p>生成日期：2026-05-14</p>
+</div>
+
+</body>
+</html>

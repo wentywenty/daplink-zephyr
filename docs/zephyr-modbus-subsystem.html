@@ -1,0 +1,1862 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zephyr RTOS Modbus 子系统 — 源码深度剖析</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f5f7fa;
+    --surface2: #eef1f6;
+    --border: #d8dce6;
+    --text: #1a1d27;
+    --text-dim: #6b7085;
+    --accent: #2563eb;
+    --accent2: #6d28d9;
+    --green: #059669;
+    --orange: #d97706;
+    --red: #dc2626;
+    --cyan: #0891b2;
+    --yellow: #b45309;
+    --code-bg: #f8f9fc;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 0;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 50%, #eff6ff 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 0 40px;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 2.4em;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--green), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 12px;
+  }
+  .header .subtitle {
+    color: var(--text-dim);
+    font-size: 1.1em;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .header .version {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 4px 14px;
+    border-radius: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-size: 0.85em;
+    font-family: monospace;
+  }
+
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 32px;
+    margin: 32px auto;
+    max-width: 900px;
+  }
+  .toc h2 {
+    font-size: 1.2em;
+    color: var(--accent);
+    margin-bottom: 12px;
+    border: none;
+    padding: 0;
+  }
+  .toc ol { padding-left: 20px; }
+  .toc li { margin: 6px 0; }
+  .toc a {
+    color: var(--text);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); }
+
+  .content {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px 64px;
+  }
+
+  h2 {
+    font-size: 1.6em;
+    margin: 48px 0 20px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text);
+  }
+  h2 .num {
+    color: var(--accent);
+    font-weight: 300;
+    margin-right: 8px;
+  }
+
+  h3 {
+    font-size: 1.2em;
+    margin: 32px 0 12px;
+    color: var(--accent);
+  }
+
+  h4 {
+    font-size: 1.05em;
+    margin: 20px 0 8px;
+    color: var(--text);
+  }
+
+  p { margin: 10px 0; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: 14px 0;
+    font-size: 0.88em;
+    line-height: 1.6;
+  }
+  code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  }
+  :not(pre) > code {
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--cyan);
+  }
+
+  .kw { color: var(--accent2); font-weight: 600; }
+  .fn { color: var(--green); }
+  .str { color: var(--orange); }
+  .cm { color: var(--text-dim); font-style: italic; }
+  .type { color: var(--cyan); }
+  .num { color: var(--yellow); }
+  .macro { color: var(--red); font-weight: 600; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.95em;
+  }
+  th {
+    background: var(--surface2);
+    color: var(--accent);
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:hover td { background: rgba(37, 99, 235, 0.05); }
+
+  .diagram {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+  .diagram pre {
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    font-size: 0.88em;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  .callout {
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    border-left: 4px solid;
+  }
+  .callout.info {
+    background: rgba(37, 99, 235, 0.06);
+    border-color: var(--accent);
+  }
+  .callout.warn {
+    background: rgba(217, 119, 6, 0.06);
+    border-color: var(--orange);
+  }
+  .callout.tip {
+    background: rgba(5, 150, 105, 0.06);
+    border-color: var(--green);
+  }
+  .callout strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.95em;
+  }
+  .callout.info strong { color: var(--accent); }
+  .callout.warn strong { color: var(--orange); }
+  .callout.tip strong { color: var(--green); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    font-weight: 600;
+  }
+  .badge.blue { background: rgba(37,99,235,0.12); color: var(--accent); }
+  .badge.green { background: rgba(5,150,105,0.12); color: var(--green); }
+  .badge.orange { background: rgba(217,119,6,0.12); color: var(--orange); }
+  .badge.red { background: rgba(220,38,38,0.12); color: var(--red); }
+  .badge.purple { background: rgba(109,40,217,0.12); color: var(--accent2); }
+  .badge.cyan { background: rgba(8,145,178,0.12); color: var(--cyan); }
+
+  ul, ol { padding-left: 24px; margin: 8px 0; }
+  li { margin: 4px 0; }
+
+  h2[id]::before {
+    content: '';
+    display: block;
+    height: 80px;
+    margin-top: -80px;
+    visibility: hidden;
+  }
+
+  .footer {
+    text-align: center;
+    padding: 32px 0;
+    color: var(--text-dim);
+    font-size: 0.85em;
+    border-top: 1px solid var(--border);
+  }
+
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .flow-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.9em;
+    font-family: monospace;
+  }
+  .flow-arrow {
+    color: var(--green);
+    font-size: 1.2em;
+  }
+
+  .file-tag {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 8px;
+    font-size: 0.82em;
+    font-family: monospace;
+    color: var(--accent);
+    margin-left: 4px;
+  }
+
+  .lineno {
+    color: var(--text-dim);
+    font-size: 0.85em;
+    user-select: none;
+    min-width: 3em;
+    display: inline-block;
+    text-align: right;
+    margin-right: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Zephyr RTOS Modbus 子系统</h1>
+  <p class="subtitle">基于源码的深度技术剖析 — 涵盖 RTU/ASCII 串行线路、Client/Server 架构、Raw ADU 模式与 TCP 网关</p>
+  <span class="version">Zephyr RTOS &bull; subsys/modbus/ &bull; 源码级分析</span>
+</div>
+
+<div class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#overview">概述与协议背景</a></li>
+    <li><a href="#directory">目录结构与构建系统</a></li>
+    <li><a href="#core-structs">核心数据结构</a></li>
+    <li><a href="#devicetree">设备树集成与上下文表生成</a></li>
+    <li><a href="#init">接口初始化生命周期</a></li>
+    <li><a href="#serial">串行线路层 (Serial Line)</a></li>
+    <li><a href="#rtu">RTU 帧处理：收发与 CRC 校验</a></li>
+    <li><a href="#ascii">ASCII 帧处理：LRC 校验与编解码</a></li>
+    <li><a href="#core-rx">核心 RX 处理与工作队列</a></li>
+    <li><a href="#client">客户端 API 实现</a></li>
+    <li><a href="#server">服务器功能码处理</a></li>
+    <li><a href="#exception">异常响应机制</a></li>
+    <li><a href="#custom-fc">自定义功能码注册</a></li>
+    <li><a href="#raw">Raw ADU 模式与 TCP 网关</a></li>
+    <li><a href="#kconfig">Kconfig 配置选项</a></li>
+    <li><a href="#samples">示例应用分析</a></li>
+    <li><a href="#architecture">架构总结与数据流</a></li>
+  </ol>
+</div>
+
+<div class="content">
+
+<!-- ================================================================ -->
+<h2 id="overview"><span class="num">01</span>概述与协议背景</h2>
+
+<p>
+  Modbus 是一种工业领域广泛使用的串行通信协议，最初由 Modicon（现施耐德电气）于 1979 年发布。
+  Zephyr RTOS 的 Modbus 子系统实现了 Modbus 协议的核心功能，支持以下传输模式与角色：
+</p>
+
+<table>
+  <tr>
+    <th>特性</th><th>说明</th>
+  </tr>
+  <tr><td><span class="badge blue">RTU</span></td><td>二进制传输，CRC16 校验，高效率，工业主流</td></tr>
+  <tr><td><span class="badge green">ASCII</span></td><td>ASCII 字符传输，LRC 校验，可读性好，调试方便</td></tr>
+  <tr><td><span class="badge purple">RAW</span></td><td>原始 ADU 模式，用于构建 TCP 网关等上层协议栈</td></tr>
+  <tr><td><span class="badge orange">Client</span></td><td>主站（Master），主动发起请求</td></tr>
+  <tr><td><span class="badge cyan">Server</span></td><td>从站（Slave），被动响应请求</td></tr>
+</table>
+
+<div class="callout info">
+  <strong>许可证溯源</strong>
+  Zephyr Modbus 实现部分源自 Silicon Labs 的 uC/Modbus 开源栈（Apache-2.0），包括客户端 API 和串行线路处理。
+  文件头部均有明确标注。
+</div>
+
+<h3>支持的功能码</h3>
+<table>
+  <tr><th>功能码</th><th>名称</th><th>源码常量</th></tr>
+  <tr><td>01</td><td>读线圈</td><td><code>MODBUS_FC01_COIL_RD</code></td></tr>
+  <tr><td>02</td><td>读离散输入</td><td><code>MODBUS_FC02_DI_RD</code></td></tr>
+  <tr><td>03</td><td>读保持寄存器</td><td><code>MODBUS_FC03_HOLDING_REG_RD</code></td></tr>
+  <tr><td>04</td><td>读输入寄存器</td><td><code>MODBUS_FC04_IN_REG_RD</code></td></tr>
+  <tr><td>05</td><td>写单线圈</td><td><code>MODBUS_FC05_COIL_WR</code></td></tr>
+  <tr><td>06</td><td>写单保持寄存器</td><td><code>MODBUS_FC06_HOLDING_REG_WR</code></td></tr>
+  <tr><td>08</td><td>诊断</td><td><code>MODBUS_FC08_DIAGNOSTICS</code></td></tr>
+  <tr><td>15</td><td>写多线圈</td><td><code>MODBUS_FC15_COILS_WR</code></td></tr>
+  <tr><td>16</td><td>写多保持寄存器</td><td><code>MODBUS_FC16_HOLDING_REGS_WR</code></td></tr>
+</table>
+
+<!-- ================================================================ -->
+<h2 id="directory"><span class="num">02</span>目录结构与构建系统</h2>
+
+<p>Modbus 子系统位于 Zephyr 源码树的 <code>subsys/modbus/</code> 目录：</p>
+
+<pre>
+subsys/modbus/
+├── CMakeLists.txt        <span class="cm"># 条件编译控制</span>
+├── Kconfig               <span class="cm"># 配置选项定义</span>
+├── modbus_core.c          <span class="cm"># 核心层：上下文表、初始化、TX/RX 调度</span>
+├── modbus_internal.h      <span class="cm"># 内部头文件：数据结构与内部 API</span>
+├── modbus_serial.c        <span class="cm"># 串行线路层：RTU/ASCII 帧处理、UART 驱动</span>
+├── modbus_client.c        <span class="cm"># 客户端 API：FC01-FC06, FC15, FC16, 诊断, FP</span>
+├── modbus_server.c        <span class="cm"># 服务器处理：功能码分发、异常响应、统计</span>
+└── modbus_raw.c           <span class="cm"># Raw ADU 支持：MBAP 头处理、TCP 网关后端</span>
+
+include/zephyr/modbus/
+└── modbus.h               <span class="cm"># 公共 API 头文件</span>
+</pre>
+
+<h3>CMakeLists.txt 条件编译 <span class="file-tag">CMakeLists.txt</span></h3>
+<pre>
+zephyr_library_sources(modbus_core.c)                           <span class="cm"># 始终编译</span>
+
+zephyr_library_sources_ifdef(CONFIG_MODBUS_SERIAL, modbus_serial.c)    <span class="cm"># 串行线路</span>
+zephyr_library_sources_ifdef(CONFIG_MODBUS_RAW_ADU, modbus_raw.c)      <span class="cm"># Raw ADU</span>
+zephyr_library_sources_ifdef(CONFIG_MODBUS_SERVER, modbus_server.c)    <span class="cm"># 服务器</span>
+zephyr_library_sources_ifdef(CONFIG_MODBUS_CLIENT, modbus_client.c)    <span class="cm"># 客户端</span>
+</pre>
+
+<div class="callout tip">
+  <strong>模块化设计</strong>
+  <code>modbus_core.c</code> 始终编译，其余四个模块通过 Kconfig 独立控制。
+  最小化配置仅包含核心层，可按需裁剪。
+</div>
+
+<!-- ================================================================ -->
+<h2 id="core-structs"><span class="num">03</span>核心数据结构</h2>
+
+<h3>3.1 modbus_adu — 应用数据单元 <span class="file-tag">modbus.h:72</span></h3>
+<p>
+  <code>modbus_adu</code> 是 Modbus 子系统的核心帧结构，用于内部处理和 Raw ADU 支持。
+  它统一了 RTU、ASCII 和 TCP 三种模式的帧表示。
+</p>
+<pre>
+struct modbus_adu {
+    uint16_t trans_id;      <span class="cm">// 事务标识符（TCP 模式使用）</span>
+    uint16_t proto_id;      <span class="cm">// 协议标识符（TCP: 0x0000）</span>
+    uint16_t length;        <span class="cm">// 数据长度（不含 unit_id + FC）</span>
+    uint8_t  unit_id;       <span class="cm">// 从站地址</span>
+    uint8_t  fc;            <span class="cm">// 功能码</span>
+    uint8_t  data[CONFIG_MODBUS_BUFFER_SIZE - 4]; <span class="cm">// 数据域</span>
+    uint16_t crc;           <span class="cm">// RTU CRC16 / ASCII LRC</span>
+};
+</pre>
+
+<div class="callout info">
+  <strong>MBAP 头映射</strong>
+  <code>trans_id</code> + <code>proto_id</code> + <code>length</code> + <code>unit_id</code>
+  恰好对应 Modbus TCP 的 MBAP (Modbus Application Protocol) 头部的 7 字节。
+  RTU 模式仅使用 <code>unit_id</code>、<code>fc</code>、<code>data</code>、<code>crc</code> 字段。
+</div>
+
+<h3>3.2 modbus_serial_config — 串行线路配置 <span class="file-tag">modbus_internal.h:71</span></h3>
+<pre>
+struct modbus_serial_config {
+    const struct device *dev;       <span class="cm">// UART 设备</span>
+    uint32_t rtu_timeout;           <span class="cm">// RTU 帧间超时 (微秒)</span>
+    uint8_t *uart_buf_ptr;          <span class="cm">// 当前缓冲区指针</span>
+    struct gpio_dt_spec *de;        <span class="cm">// RS-485 驱动器使能 (DE) 引脚</span>
+    struct gpio_dt_spec *re;        <span class="cm">// RS-485 接收使能 (nRE) 引脚</span>
+    struct k_timer rtu_timer;       <span class="cm">// RTU 帧结束检测定时器</span>
+    uint16_t uart_buf_ctr;          <span class="cm">// 已接收/待发送字节数</span>
+    uint8_t uart_buf[CONFIG_MODBUS_BUFFER_SIZE]; <span class="cm">// UART 收发缓冲区</span>
+};
+</pre>
+
+<h3>3.3 modbus_context — 接口上下文 <span class="file-tag">modbus_internal.h:93</span></h3>
+<p>
+  每个 Modbus 接口（由设备树定义）对应一个 <code>modbus_context</code> 实例，
+  是整个子系统的运行时核心。
+</p>
+<pre>
+struct modbus_context {
+    const char *iface_name;                <span class="cm">// 接口名称（来自设备树）</span>
+    union {
+        struct modbus_serial_config *cfg;  <span class="cm">// 串行线路配置</span>
+        struct modbus_raw_cb rawcb;        <span class="cm">// RAW TX 回调</span>
+    };
+    enum modbus_mode mode;                 <span class="cm">// RTU / ASCII / RAW</span>
+    bool client;                           <span class="cm">// true = 客户端</span>
+    uint32_t rxwait_to;                    <span class="cm">// 客户端等待响应超时</span>
+    struct modbus_user_callbacks *mbs_user_cb; <span class="cm">// 服务器用户回调</span>
+    atomic_t state;                        <span class="cm">// 接口状态位</span>
+
+    struct k_mutex iface_lock;             <span class="cm">// 客户端互斥锁</span>
+    struct k_sem client_wait_sem;          <span class="cm">// 客户端等待信号量</span>
+    struct k_work server_work;             <span class="cm">// RX 处理工作项</span>
+    struct modbus_adu rx_adu;              <span class="cm">// 接收帧</span>
+    struct modbus_adu tx_adu;              <span class="cm">// 发送帧</span>
+    int rx_adu_err;                        <span class="cm">// 帧接收错误码</span>
+
+<span class="cm">#ifdef CONFIG_MODBUS_FC08_DIAGNOSTIC</span>
+    uint16_t mbs_msg_ctr;                  <span class="cm">// 消息计数器</span>
+    uint16_t mbs_crc_err_ctr;              <span class="cm">// CRC 错误计数器</span>
+    uint16_t mbs_except_ctr;               <span class="cm">// 异常计数器</span>
+    uint16_t mbs_server_msg_ctr;           <span class="cm">// 服务器消息计数器</span>
+    uint16_t mbs_noresp_ctr;               <span class="cm">// 无响应计数器</span>
+<span class="cm">#endif</span>
+    sys_slist_t user_defined_cbs;          <span class="cm">// 自定义功能码链表</span>
+    uint8_t unit_id;                       <span class="cm">// 服务器从站地址</span>
+};
+</pre>
+
+<div class="callout warn">
+  <strong>内存开销</strong>
+  每个 <code>modbus_context</code> 包含两个 <code>modbus_adu</code>（rx + tx），
+  默认 <code>CONFIG_MODBUS_BUFFER_SIZE=256</code> 时，单实例约占用 1KB+ RAM。
+  加上 <code>modbus_serial_config</code> 的 UART 缓冲区（256 字节），
+  一个接口约需 ~2.5KB RAM。
+</div>
+
+<h3>3.4 modbus_user_callbacks — 服务器用户回调 <span class="file-tag">modbus.h:359</span></h3>
+<pre>
+struct modbus_user_callbacks {
+    int (*coil_rd)(uint16_t addr, bool *state);
+    int (*coil_wr)(uint16_t addr, bool state);
+    int (*discrete_input_rd)(uint16_t addr, bool *state);
+    int (*input_reg_rd)(uint16_t addr, uint16_t *reg);
+    int (*input_reg_rd_fp)(uint16_t addr, float *reg);
+    int (*holding_reg_rd)(uint16_t addr, uint16_t *reg);
+    int (*holding_reg_wr)(uint16_t addr, uint16_t reg);
+    int (*holding_reg_rd_fp)(uint16_t addr, float *reg);
+    int (*holding_reg_wr_fp)(uint16_t addr, float reg);
+};
+</pre>
+
+<h3>3.5 modbus_iface_param — 接口配置参数 <span class="file-tag">modbus.h:515</span></h3>
+<pre>
+struct modbus_iface_param {
+    enum modbus_mode mode;     <span class="cm">// RTU / ASCII / RAW</span>
+    union {
+        struct modbus_server_param server;  <span class="cm">// 服务器：回调 + unit_id</span>
+        uint32_t rx_timeout;                <span class="cm">// 客户端：响应超时</span>
+    };
+    union {
+        struct modbus_serial_param serial;  <span class="cm">// 串行参数：波特率、校验</span>
+        struct modbus_raw_cb rawcb;         <span class="cm">// RAW 回调</span>
+    };
+};
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="devicetree"><span class="num">04</span>设备树集成与上下文表生成</h2>
+
+<p>
+  Zephyr Modbus 子系统通过设备树宏在编译期生成接口上下文表，
+  无需动态分配内存。这是 Zephyr 的典型设计模式。
+</p>
+
+<h3>4.1 设备树兼容字符串</h3>
+<pre>
+#define DT_DRV_COMPAT zephyr_modbus_serial
+</pre>
+<p>
+  设备树中使用 <code>zephyr,modbus-serial</code> 兼容字符串定义 Modbus 串行接口。
+  UART 设备作为父节点被引用。
+</p>
+
+<h3>4.2 GPIO 配置静态生成 <span class="file-tag">modbus_core.c:18-31</span></h3>
+<pre>
+<span class="cm">/* 为每个实例的 DE/nRE 引脚生成静态 gpio_dt_spec */</span>
+#define MB_RTU_DEFINE_GPIO_CFG(inst, prop)               \
+    static struct gpio_dt_spec prop##_cfg_##inst = {     \
+        .port = DEVICE_DT_GET(DT_INST_PHANDLE(inst, prop)), \
+        .pin = DT_INST_GPIO_PIN(inst, prop),             \
+        .dt_flags = DT_INST_GPIO_FLAGS(inst, prop),      \
+    };
+
+<span class="cm">/* 仅在设备树节点声明了该属性时才生成 */</span>
+#define MB_RTU_DEFINE_GPIO_CFGS(inst)                    \
+    COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, de_gpios),  \
+                (MB_RTU_DEFINE_GPIO_CFG(inst, de_gpios)), ()) \
+    COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, re_gpios),  \
+                (MB_RTU_DEFINE_GPIO_CFG(inst, re_gpios)), ())
+
+<span class="cm">/* 遍历所有 status = "okay" 的实例 */</span>
+DT_INST_FOREACH_STATUS_OKAY(MB_RTU_DEFINE_GPIO_CFGS)
+</pre>
+
+<h3>4.3 串行配置数组 <span class="file-tag">modbus_core.c:44-47</span></h3>
+<pre>
+static struct modbus_serial_config modbus_serial_cfg[] = {
+    DT_INST_FOREACH_STATUS_OKAY(MODBUS_DT_GET_SERIAL_DEV)
+};
+</pre>
+<p>
+  <code>MODBUS_DT_GET_SERIAL_DEV</code> 宏为每个设备树实例展开一个初始化项，
+  从父节点获取 UART 设备，从属性获取 DE/nRE GPIO spec。
+</p>
+
+<h3>4.4 上下文表 <span class="file-tag">modbus_core.c:61-66</span></h3>
+<pre>
+static struct modbus_context mb_ctx_tbl[] = {
+    DT_INST_FOREACH_STATUS_OKAY(MODBUS_DT_GET_DEV)  <span class="cm">// 串行接口</span>
+#ifdef CONFIG_MODBUS_RAW_ADU
+    LISTIFY(CONFIG_MODBUS_NUMOF_RAW_ADU, DEFINE_MODBUS_RAW_ADU, (,), _)  <span class="cm">// RAW 接口</span>
+#endif
+};
+</pre>
+
+<div class="callout info">
+  <strong>两级实例化</strong>
+  串行接口数量由设备树 <code>zephyr,modbus-serial</code> 节点决定；
+  Raw ADU 接口数量由 <code>CONFIG_MODBUS_NUMOF_RAW_ADU</code> (1-4) 控制。
+  两者共享同一个 <code>mb_ctx_tbl[]</code> 数组，通过索引统一寻址。
+</div>
+
+<h3>4.5 接口查找 <span class="file-tag">modbus_core.c:182-191</span></h3>
+<pre>
+int modbus_iface_get_by_name(const char *iface_name)
+{
+    for (int i = 0; i &lt; ARRAY_SIZE(mb_ctx_tbl); i++) {
+        if (strcmp(iface_name, mb_ctx_tbl[i].iface_name) == 0) {
+            return i;
+        }
+    }
+    return -ENODEV;
+}
+</pre>
+<p>
+  应用层通过 <code>DEVICE_DT_NAME()</code> 获取设备树节点名称，
+  然后调用 <code>modbus_iface_get_by_name()</code> 将名称映射为数组索引。
+</p>
+
+<!-- ================================================================ -->
+<h2 id="init"><span class="num">05</span>接口初始化生命周期</h2>
+
+<h3>5.1 初始化流程</h3>
+<div class="diagram">
+<pre>
+应用层                          modbus_core                        底层驱动
+───────                        ───────────                        ────────
+modbus_init_server(iface, param)
+  │
+  ├─ modbus_init_iface(iface)
+  │    ├─ atomic_test_and_set_bit(CONFIGURED)    <span class="cm"># 防止重复初始化</span>
+  │    ├─ k_mutex_init(&amp;iface_lock)
+  │    ├─ k_sem_init(&amp;client_wait_sem, 0, 1)
+  │    └─ k_work_init(&amp;server_work, modbus_rx_handler)
+  │
+  ├─ modbus_user_fc_init()                       <span class="cm"># 初始化自定义 FC 链表</span>
+  │
+  ├─ modbus_serial_init(ctx, param)              <span class="cm"># [RTU/ASCII 模式]</span>
+  │    ├─ configure_uart()                        <span class="cm"># 波特率、校验位、停止位</span>
+  │    ├─ 计算 rtu_timeout                        <span class="cm"># 帧间超时</span>
+  │    ├─ configure_gpio()                        <span class="cm"># DE/nRE 引脚</span>
+  │    ├─ uart_irq_callback_user_data_set()       <span class="cm"># 或 uart_callback_set()</span>
+  │    └─ modbus_serial_rx_on()                   <span class="cm"># [服务器模式] 开始接收</span>
+  │
+  └─ 保存 unit_id, user_cb, 初始化统计计数器
+</pre>
+</div>
+
+<h3>5.2 RTU 超时计算 <span class="file-tag">modbus_serial.c:675-680</span></h3>
+<pre>
+if (param.serial.baud &lt;= 38400) {
+    cfg-&gt;rtu_timeout = (numof_bits * if_delay_max) / param.serial.baud;
+} else {
+    cfg-&gt;rtu_timeout = (numof_bits * if_delay_max) / 38400;
+}
+</pre>
+<p>
+  RTU 模式下，帧间静默时间必须至少 3.5 个字符时间。
+  计算：<code>11 bits × 3,500,000 / baud</code>。对于 19200 baud，
+  超时约 2004 &mu;s。高于 38400 baud 时固定使用 38400 计算（协议要求）。
+</p>
+
+<h3>5.3 UART 配置 <span class="file-tag">modbus_serial.c:536-585</span></h3>
+<table>
+  <tr><th>参数</th><th>RTU 模式</th><th>ASCII 模式</th></tr>
+  <tr><td>数据位</td><td>8</td><td>7</td></tr>
+  <tr><td>有校验时停止位</td><td>1</td><td>1</td></tr>
+  <tr><td>无校验时停止位</td><td>2</td><td>2</td></tr>
+  <tr><td>校验位</td><td>用户指定 (Even/Odd/None)</td><td>同左</td></tr>
+</table>
+
+<h3>5.4 禁用接口 <span class="file-tag">modbus_core.c:376-409</span></h3>
+<pre>
+int modbus_disable(const uint8_t iface)
+{
+    <span class="cm">// 1. 关闭底层传输</span>
+    switch (ctx-&gt;mode) {
+    case MODBUS_MODE_RTU:
+    case MODBUS_MODE_ASCII:
+        modbus_serial_disable(ctx);   <span class="cm">// TX off, RX off, stop timer</span>
+        break;
+    case MODBUS_MODE_RAW:
+        break;
+    }
+
+    <span class="cm">// 2. 取消挂起的工作项</span>
+    k_work_cancel_sync(&amp;ctx-&gt;server_work, &amp;work_sync);
+
+    <span class="cm">// 3. 清除配置状态</span>
+    atomic_clear_bit(&amp;ctx-&gt;state, MODBUS_STATE_CONFIGURED);
+}
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="serial"><span class="num">06</span>串行线路层 (Serial Line)</h2>
+
+<p>
+  串行线路层是 Modbus 最底层的传输层，直接与 UART 硬件交互。
+  支持两种 UART API：中断驱动 (IRQ) 和异步 (Async)。
+</p>
+
+<h3>6.1 双 API 支持 <span class="file-tag">modbus_serial.c</span></h3>
+<table>
+  <tr><th>特性</th><th>IRQ 模式 (默认)</th><th>Async 模式</th></tr>
+  <tr>
+    <td>Kconfig</td>
+    <td>默认启用</td>
+    <td><code>CONFIG_MODBUS_SERIAL_ASYNC_API</code></td>
+  </tr>
+  <tr>
+    <td>注册回调</td>
+    <td><code>uart_irq_callback_user_data_set()</code></td>
+    <td><code>uart_callback_set()</code></td>
+  </tr>
+  <tr>
+    <td>TX 发送</td>
+    <td><code>uart_irq_tx_enable()</code> + FIFO 填充</td>
+    <td><code>uart_tx()</code></td>
+  </tr>
+  <tr>
+    <td>RX 接收</td>
+    <td><code>uart_irq_rx_enable()</code> + FIFO 读取</td>
+    <td><code>uart_rx_enable()</code></td>
+  </tr>
+  <tr>
+    <td>RTU 帧检测</td>
+    <td><code>k_timer</code> (rtu_timer)</td>
+    <td>UART async RX timeout</td>
+  </tr>
+</table>
+
+<h3>6.2 RS-485 收发控制</h3>
+<p>
+  RS-485 半双工总线需要通过 GPIO 控制 DE（驱动器使能）和 nRE（接收使能）引脚。
+  这两个引脚在设备树中可选配置。
+</p>
+
+<pre>
+<span class="cm">// 发送前：DE = 1（使能驱动器）</span>
+static void modbus_serial_tx_on(struct modbus_context *ctx)
+{
+    if (cfg-&gt;de != NULL) gpio_pin_set_dt(cfg-&gt;de, 1);
+    <span class="cm">// ... 启动 TX ...</span>
+}
+
+<span class="cm">// 发送完成：DE = 0, 恢复接收</span>
+static void modbus_serial_tx_off(struct modbus_context *ctx)
+{
+    <span class="cm">// ... 停止 TX ...</span>
+    if (cfg-&gt;de != NULL) gpio_pin_set_dt(cfg-&gt;de, 0);
+}
+</pre>
+
+<div class="callout warn">
+  <strong>发送完成等待</strong>
+  IRQ 模式中，TX 完成判断使用 <code>uart_irq_tx_complete()</code>，
+  确保 UART 移位寄存器中所有数据已发送完毕后才切换 RS-485 方向。
+  过早切换会导致最后一字节被截断。
+  <span class="file-tag">modbus_serial.c:424</span>
+</div>
+
+<h3>6.3 IRQ 模式收发流程</h3>
+<div class="diagram">
+<pre>
+UART IRQ 触发
+     │
+     ├─ RX Ready?
+     │    └─ cb_handler_rx(ctx)
+     │         ├─ [ASCII] 逐字节读入，检测 ':' 开始 / CR+LF 结束
+     │         │    └─ 检测到 LF → k_work_submit(&amp;server_work)
+     │         │
+     │         └─ [RTU] FIFO 批量读取 + 重启 rtu_timer
+     │              └─ 定时器到期 → k_work_submit(&amp;server_work)
+     │
+     └─ TX Ready?
+          └─ cb_handler_tx(ctx)
+               ├─ 数据未发完 → uart_fifo_fill() 继续
+               └─ 发送完成 → TX off → RX FIFO drain → RX on
+</pre>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="rtu"><span class="num">07</span>RTU 帧处理：收发与 CRC 校验</h2>
+
+<h3>7.1 RTU 帧格式</h3>
+<div class="diagram">
+<pre>
+┌──────────┬──────────┬──────────────┬─────────┬─────────┐
+│ 设备地址 │  功能码  │     数据     │  CRC L  │  CRC H  │
+│  1 byte  │  1 byte  │  0-252 bytes │ 1 byte  │ 1 byte  │
+└──────────┴──────────┴──────────────┴─────────┴─────────┘
+  uart_buf[0]  [1]      [2..N-3]      [N-2]     [N-1]
+</pre>
+</div>
+
+<h3>7.2 RTU 接收：CRC 校验 <span class="file-tag">modbus_serial.c:284-319</span></h3>
+<pre>
+static int modbus_rtu_rx_adu(struct modbus_context *ctx)
+{
+    <span class="cm">// 1. 长度检查：最小 4 字节 (addr + fc + crc16)</span>
+    if ((cfg-&gt;uart_buf_ctr &lt; MODBUS_RTU_MIN_MSG_SIZE) ||
+        (cfg-&gt;uart_buf_ctr &gt; CONFIG_MODBUS_BUFFER_SIZE))
+        return -EMSGSIZE;
+
+    <span class="cm">// 2. 提取字段</span>
+    ctx-&gt;rx_adu.unit_id = cfg-&gt;uart_buf[0];
+    ctx-&gt;rx_adu.fc      = cfg-&gt;uart_buf[1];
+    ctx-&gt;rx_adu.length  = cfg-&gt;uart_buf_ctr - 4;  <span class="cm">// 减去 addr + fc + crc</span>
+
+    <span class="cm">// 3. CRC 校验</span>
+    ctx-&gt;rx_adu.crc = sys_get_le16(&amp;cfg-&gt;uart_buf[crc_idx]);
+    calc_crc = crc16_ansi(&amp;cfg-&gt;uart_buf[0],
+                          cfg-&gt;uart_buf_ctr - sizeof(ctx-&gt;rx_adu.crc));
+    if (ctx-&gt;rx_adu.crc != calc_crc)
+        return -EIO;
+
+    return 0;
+}
+</pre>
+
+<h3>7.3 RTU 发送：CRC 附加 <span class="file-tag">modbus_serial.c:321-346</span></h3>
+<pre>
+static void modbus_rtu_tx_adu(struct modbus_context *ctx)
+{
+    cfg-&gt;uart_buf[0] = ctx-&gt;tx_adu.unit_id;
+    cfg-&gt;uart_buf[1] = ctx-&gt;tx_adu.fc;
+    tx_bytes = 2 + ctx-&gt;tx_adu.length;
+    memcpy(data_ptr, ctx-&gt;tx_adu.data, ctx-&gt;tx_adu.length);
+
+    <span class="cm">// 计算 CRC 并附加到帧尾 (小端序)</span>
+    ctx-&gt;tx_adu.crc = crc16_ansi(&amp;cfg-&gt;uart_buf[0],
+                                  ctx-&gt;tx_adu.length + 2);
+    sys_put_le16(ctx-&gt;tx_adu.crc,
+                 &amp;cfg-&gt;uart_buf[ctx-&gt;tx_adu.length + 2]);
+
+    <span class="cm">// 关闭 RX → 打开 TX（半双工切换）</span>
+    modbus_serial_rx_off(ctx);
+    modbus_serial_tx_on(ctx);
+}
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="ascii"><span class="num">08</span>ASCII 帧处理：LRC 校验与编解码</h2>
+
+<p>
+  ASCII 模式将每个字节编码为两个 ASCII 十六进制字符（如 <code>0xFF</code> → <code>"FF"</code>），
+  使用 <code>':'</code> 作为帧起始符，<code>"\r\n"</code> 作为帧结束符。
+  校验使用 LRC (Longitudinal Redundancy Check)。
+</p>
+
+<h3>8.1 ASCII 帧格式</h3>
+<div class="diagram">
+<pre>
+┌─────┬──────────┬──────────┬──────────┬─────┬─────┬─────┐
+│ ':' │ 地址 HH │ 功能 HH │ 数据 HH │ LRC │ CR  │ LF  │
+│ 1B  │  1+1 = 2 chars  │ 2 chars  │ N×2  │ 2   │ 1   │ 1   │
+└─────┴──────────┴──────────┴──────────┴─────┴─────┴─────┘
+</pre>
+</div>
+
+<h3>8.2 LRC 计算 <span class="file-tag">modbus_serial.c:117-137</span></h3>
+<pre>
+static uint8_t modbus_ascii_get_lrc(uint8_t *src, size_t length)
+{
+    uint8_t lrc = 0;
+
+    while (length-- > 0) {
+        hex2bin(pblock, 2, &amp;tmp, sizeof(tmp));  <span class="cm">// ASCII → binary</span>
+        lrc += tmp;
+        pblock += 2;
+    }
+
+    lrc = ~lrc + 1;  <span class="cm">// 取二进制补码</span>
+    return lrc;
+}
+</pre>
+
+<h3>8.3 ASCII 接收 <span class="file-tag">modbus_serial.c:140-211</span></h3>
+<p>接收流程严格验证帧结构：</p>
+<ol>
+  <li>检查字节数为奇数（ASCII 模式特性）</li>
+  <li>验证最小长度 (<code>MODBUS_ASCII_MIN_MSG_SIZE = 11</code>)</li>
+  <li>检查起始符 <code>':'</code> 和结束符 <code>"\r\n"</code></li>
+  <li>逐字节 hex2bin 转换：地址 → 功能码 → 数据</li>
+  <li>提取帧内 LRC 并与计算值比较</li>
+</ol>
+
+<h3>8.4 ASCII 发送 <span class="file-tag">modbus_serial.c:226-271</span></h3>
+<pre>
+static void modbus_ascii_tx_adu(struct modbus_context *ctx)
+{
+    cfg-&gt;uart_buf[0] = ':';                       <span class="cm">// 起始符</span>
+    pbuf = modbus_ascii_bin2hex(ctx-&gt;tx_adu.unit_id, pbuf);  <span class="cm">// 地址</span>
+    pbuf = modbus_ascii_bin2hex(ctx-&gt;tx_adu.fc, pbuf);       <span class="cm">// 功能码</span>
+    for (int i = 0; i &lt; ctx-&gt;tx_adu.length; i++)
+        pbuf = modbus_ascii_bin2hex(ctx-&gt;tx_adu.data[i], pbuf);
+
+    lrc = modbus_ascii_get_lrc(...);
+    pbuf = modbus_ascii_bin2hex(lrc, pbuf);       <span class="cm">// LRC</span>
+    *pbuf++ = '\r';  *pbuf++ = '\n';              <span class="cm">// 结束符</span>
+
+    modbus_serial_rx_off(ctx);
+    modbus_serial_tx_on(ctx);
+}
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="core-rx"><span class="num">09</span>核心 RX 处理与工作队列</h2>
+
+<p>
+  无论是 RTU 定时器到期、ASCII 结束符检测，还是 Async 模式 RX_RDY 事件，
+  最终都提交到同一个 <code>k_work</code>（<code>server_work</code>）。
+</p>
+
+<h3>9.1 modbus_rx_handler <span class="file-tag">modbus_core.c:68-115</span></h3>
+<pre>
+static void modbus_rx_handler(struct k_work *item)
+{
+    ctx = CONTAINER_OF(item, struct modbus_context, server_work);
+
+    <span class="cm">// Step 1: 根据 mode 解码帧</span>
+    switch (ctx-&gt;mode) {
+    case MODBUS_MODE_RTU:
+    case MODBUS_MODE_ASCII:
+        modbus_serial_rx_disable(ctx);
+        ctx-&gt;rx_adu_err = modbus_serial_rx_adu(ctx);
+        break;
+    case MODBUS_MODE_RAW:
+        ctx-&gt;rx_adu_err = modbus_raw_rx_adu(ctx);
+        break;
+    }
+
+    <span class="cm">// Step 2: 根据角色分发</span>
+    if (ctx-&gt;client == true) {
+        k_sem_give(&amp;ctx-&gt;client_wait_sem);    <span class="cm">// 唤醒等待的客户端</span>
+    } else if (IS_ENABLED(CONFIG_MODBUS_SERVER)) {
+        bool respond = modbus_server_handler(ctx);
+        if (respond) {
+            modbus_tx_adu(ctx);                  <span class="cm">// 发送响应</span>
+        } else {
+            modbus_serial_rx_enable(ctx);         <span class="cm">// 丢弃帧，重新接收</span>
+        }
+    }
+}
+</pre>
+
+<div class="callout info">
+  <strong>双角色复用</strong>
+  同一个 work handler 处理客户端和服务器的响应帧。
+  对于客户端：通过信号量通知阻塞的调用线程；
+  对于服务器：直接调用 server_handler 处理请求并回复。
+</div>
+
+<h3>9.2 客户端发送-等待-接收 <span class="file-tag">modbus_core.c:138-150</span></h3>
+<pre>
+int modbus_tx_wait_rx_adu(struct modbus_context *ctx)
+{
+    k_sem_reset(&amp;ctx-&gt;client_wait_sem);
+    modbus_tx_adu(ctx);                                   <span class="cm">// 发送请求</span>
+
+    if (k_sem_take(&amp;ctx-&gt;client_wait_sem,
+                   K_USEC(ctx-&gt;rxwait_to)) != 0) {        <span class="cm">// 等待响应</span>
+        return -ETIMEDOUT;
+    }
+
+    return ctx-&gt;rx_adu_err;                               <span class="cm">// 返回帧错误码</span>
+}
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="client"><span class="num">10</span>客户端 API 实现</h2>
+
+<p>
+  客户端 API 提供阻塞式调用：加锁 → 构建 TX ADU → 发送 → 等待响应 → 验证 → 解锁。
+  所有公开 API 均遵循相同模式。
+</p>
+
+<h3>10.1 通用调用模式 <span class="file-tag">modbus_client.c</span></h3>
+<div class="diagram">
+<pre>
+modbus_read_holding_regs(iface, unit_id, addr, buf, count)
+  │
+  ├─ k_mutex_lock(&amp;ctx-&gt;iface_lock, K_FOREVER)      <span class="cm"># 互斥访问</span>
+  │
+  ├─ 构建 tx_adu:
+  │    ├─ tx_adu.unit_id = unit_id
+  │    ├─ tx_adu.fc = MODBUS_FC03_HOLDING_REG_RD
+  │    ├─ sys_put_be16(addr, &amp;tx_adu.data[0])
+  │    ├─ sys_put_be16(count, &amp;tx_adu.data[2])
+  │    └─ tx_adu.length = 4
+  │
+  ├─ modbus_tx_wait_rx_adu(ctx)                       <span class="cm"># 发送并等待</span>
+  │
+  ├─ 验证响应:
+  │    ├─ rx_adu.fc == tx_adu.fc                       <span class="cm"># 功能码匹配</span>
+  │    ├─ rx_adu.length 合理                            <span class="cm"># 长度检查</span>
+  │    └─ 提取数据到 buf
+  │
+  ├─ k_mutex_unlock(&amp;ctx-&gt;iface_lock)
+  └─ return err
+</pre>
+</div>
+
+<h3>10.2 各功能码实现细节</h3>
+
+<h4>FC01 — 读线圈 <span class="file-tag">modbus_client.c</span></h4>
+<pre>
+<span class="cm">// 请求：起始地址(2B) + 线圈数量(2B)</span>
+sys_put_be16(start_addr, &amp;ctx-&gt;tx_adu.data[0]);
+sys_put_be16(num_coils,  &amp;tx_adu.data[2]);
+tx_adu.length = 4;
+
+<span class="cm">// 响应：字节数(1B) + 线圈状态(ceil(num_coils/8) bytes)</span>
+num_bytes = rx_adu-&gt;data[0];
+memcpy(coil_tbl, &amp;rx_adu-&gt;data[1], num_bytes);
+</pre>
+
+<h4>FC03 — 读保持寄存器 <span class="file-tag">modbus_client.c</span></h4>
+<pre>
+<span class="cm">// 请求：起始地址(2B) + 寄存器数量(2B)</span>
+<span class="cm">// 响应：字节数(1B) + 寄存器值(2B × num_regs, 大端序)</span>
+for (int i = 0; i &lt; num_regs; i++) {
+    reg_buf[i] = sys_get_be16(&amp;rx_adu-&gt;data[1 + i * 2]);
+}
+</pre>
+
+<h4>FC05 — 写单线圈 <span class="file-tag">modbus_client.c</span></h4>
+<pre>
+<span class="cm">// 请求：输出地址(2B) + 输出值(2B: 0xFF00=ON, 0x0000=OFF)</span>
+sys_put_be16(coil_addr, &amp;tx_adu.data[0]);
+if (coil_state)
+    sys_put_be16(MODBUS_COIL_ON_CODE, &amp;tx_adu.data[2]);
+else
+    sys_put_be16(MODBUS_COIL_OFF_CODE, &amp;tx_adu.data[2]);
+tx_adu.length = 4;
+<span class="cm">// 响应为回显 (echo)</span>
+</pre>
+
+<h4>FC16 — 写多保持寄存器 <span class="file-tag">modbus_client.c</span></h4>
+<pre>
+<span class="cm">// 请求：起始地址(2B) + 寄存器数量(2B) + 字节数(1B) + 寄存器值</span>
+sys_put_be16(start_addr, &amp;tx_adu.data[0]);
+sys_put_be16(num_regs,  &amp;tx_adu.data[2]);
+tx_adu.data[4] = (uint8_t)(num_regs * 2);
+for (int i = 0; i &lt; num_regs; i++)
+    sys_put_be16(reg_buf[i], &amp;tx_adu.data[5 + i * 2]);
+tx_adu.length = 5 + num_regs * 2;
+</pre>
+
+<h4>FC08 — 诊断 <span class="file-tag">modbus_client.c</span></h4>
+<pre>
+<span class="cm">// 请求：子功能码(2B) + 数据(2B)</span>
+sys_put_be16(sfunc, &amp;tx_adu.data[0]);
+sys_put_be16(data,  &amp;tx_adu.data[2]);
+tx_adu.length = 4;
+<span class="cm">// 响应：子功能码(2B) + 数据(2B)</span>
+*data_out = sys_get_be16(&amp;rx_adu-&gt;data[2]);
+</pre>
+
+<h3>10.3 浮点扩展 <span class="file-tag">modbus_client.c</span></h3>
+<p>
+  Modbus 规范不原生支持浮点数。Zephyr 通过约定实现：
+  浮点寄存器地址从 <code>5000</code> 开始（<code>MODBUS_FP_EXTENSIONS_ADDR</code>），
+  每个浮点值占用两个 16 位寄存器（大端序 IEEE 754）。
+</p>
+<pre>
+int modbus_read_holding_regs_fp(iface, unit_id, start_addr, reg_buf, num_regs)
+{
+    <span class="cm">// 将 float 指针视为 uint16 指针</span>
+    uint16_t *reg_buf_u16 = (uint16_t *)reg_buf;
+
+    err = modbus_read_holding_regs(iface, unit_id,
+                                   start_addr + MODBUS_FP_EXTENSIONS_ADDR,
+                                   reg_buf_u16, num_regs * 2);
+    <span class="cm">// 大端序已在 modbus_read_holding_regs 中转换</span>
+    <span class="cm">// 浮点值的字节序由平台 float 内存表示决定</span>
+}
+</pre>
+
+<div class="callout tip">
+  <strong>线程安全</strong>
+  所有客户端 API 通过 <code>k_mutex_lock(&amp;ctx-&gt;iface_lock)</code> 保证互斥。
+  同一接口上的并发请求会被序列化，不会出现帧交错。
+</div>
+
+<!-- ================================================================ -->
+<h2 id="server"><span class="num">11</span>服务器功能码处理</h2>
+
+<p>
+  <code>modbus_server_handler()</code> 是服务器的核心分发函数。
+  它从接收到的 ADU 中提取功能码，分发到对应的处理函数。
+</p>
+
+<h3>11.1 分发逻辑 <span class="file-tag">modbus_server.c</span></h3>
+<pre>
+bool modbus_server_handler(struct modbus_context *ctx)
+{
+    <span class="cm">// 1. 检查 CRC/帧错误</span>
+    if (ctx-&gt;rx_adu_err != 0) {
+        LOG_WRN("Server has dropped frame");
+        return false;
+    }
+
+    <span class="cm">// 2. 检查 unit_id 匹配（0 = 广播，始终处理）</span>
+    if (ctx-&gt;rx_adu.unit_id != ctx-&gt;unit_id &amp;&amp;
+        ctx-&gt;rx_adu.unit_id != 0)
+        return false;
+
+    <span class="cm">// 3. 更新统计</span>
+    if (IS_ENABLED(CONFIG_MODBUS_FC08_DIAGNOSTIC))
+        modbus_update_stats(ctx);
+
+    <span class="cm">// 4. 准备响应 ADU</span>
+    ctx-&gt;tx_adu.unit_id = ctx-&gt;rx_adu.unit_id;
+    ctx-&gt;tx_adu.fc      = ctx-&gt;rx_adu.fc;
+
+    <span class="cm">// 5. 功能码分发</span>
+    switch (ctx-&gt;rx_adu.fc) {
+    case MODBUS_FC01_COIL_RD:       exc = fc01_coil_read(ctx);       break;
+    case MODBUS_FC02_DI_RD:         exc = fc02_di_read(ctx);         break;
+    case MODBUS_FC03_HOLDING_REG_RD: exc = fc03_holding_reg_read(ctx); break;
+    case MODBUS_FC04_IN_REG_RD:     exc = fc04_in_reg_read(ctx);     break;
+    case MODBUS_FC05_COIL_WR:       exc = fc05_coil_write(ctx);      break;
+    case MODBUS_FC06_HOLDING_REG_WR: exc = fc06_holding_reg_write(ctx); break;
+    case MODBUS_FC08_DIAGNOSTICS:   exc = fc08_diagnostics(ctx);     break;
+    case MODBUS_FC15_COILS_WR:      exc = fc15_coils_write(ctx);     break;
+    case MODBUS_FC16_HOLDING_REGS_WR: exc = fc16_holding_regs_write(ctx); break;
+    default:
+        <span class="cm">// 6. 尝试用户自定义功能码</span>
+        exc = modbus_user_defined_fc_handler(ctx);
+        break;
+    }
+
+    <span class="cm">// 7. 异常处理</span>
+    if (exc != MODBUS_EXC_NONE)
+        modbus_excep_response(ctx, ctx-&gt;rx_adu.fc, exc);
+
+    <span class="cm">// 8. 广播地址不回复</span>
+    if (ctx-&gt;rx_adu.unit_id == 0)
+        return false;
+
+    return (exc == MODBUS_EXC_NONE);
+}
+</pre>
+
+<h3>11.2 FC01/FC02 — 读线圈/离散输入</h3>
+<pre>
+<span class="cm">// 请求解析</span>
+uint16_t addr = sys_get_be16(&amp;rx_adu-&gt;data[0]);
+uint16_t count = sys_get_be16(&amp;rx_adu-&gt;data[2]);
+
+<span class="cm">// 范围检查</span>
+if (count &lt; 1 || count &gt; 2000) return MODBUS_EXC_ILLEGAL_DATA_VAL;
+
+<span class="cm">// 逐位读取，通过用户回调获取每个 coil/DI 的状态</span>
+for (int i = 0; i &lt; count; i++) {
+    err = ctx-&gt;mbs_user_cb-&gt;coil_rd(addr + i, &amp;state);
+    if (err) return MODBUS_EXC_ILLEGAL_DATA_ADDR;
+    if (state) coil |= BIT(i % 8);
+    if ((i % 8 == 7) || (i == count - 1))
+        tx_adu-&gt;data[1 + i / 8] = coil;
+}
+
+<span class="cm">// 响应：字节数(1B) + 位 packed 数据</span>
+tx_adu-&gt;data[0] = (count + 7) / 8;
+tx_adu-&gt;length = tx_adu-&gt;data[0] + 1;
+</pre>
+
+<h3>11.3 FC03/FC04 — 读保持/输入寄存器</h3>
+<pre>
+<span class="cm">// 请求解析</span>
+uint16_t addr = sys_get_be16(&amp;rx_adu-&gt;data[0]);
+uint16_t count = sys_get_be16(&amp;rx_adu-&gt;data[2]);
+
+<span class="cm">// 检查是否为浮点寄存器（地址 >= 5000）</span>
+if (addr &gt;= MODBUS_FP_EXTENSIONS_ADDR) {
+    addr -= MODBUS_FP_EXTENSIONS_ADDR;
+    <span class="cm">// 使用浮点回调</span>
+    ctx-&gt;mbs_user_cb-&gt;holding_reg_rd_fp(addr + i, &amp;fp_reg);
+    memcpy(&amp;tx_adu-&gt;data[1 + i * 4], &amp;fp_reg, sizeof(float));
+    tx_adu-&gt;length = count * 4 + 1;
+} else {
+    ctx-&gt;mbs_user_cb-&gt;holding_reg_rd(addr + i, &amp;reg);
+    sys_put_be16(reg, &amp;tx_adu-&gt;data[1 + i * 2]);
+    tx_adu-&gt;length = count * 2 + 1;
+}
+
+<span class="cm">// 响应：字节数(1B) + 寄存器值(大端序)</span>
+tx_adu-&gt;data[0] = tx_adu-&gt;length - 1;
+</pre>
+
+<h3>11.4 FC05 — 写单线圈</h3>
+<pre>
+uint16_t coil_addr = sys_get_be16(&amp;rx_adu-&gt;data[0]);
+uint16_t coil_val  = sys_get_be16(&amp;rx_adu-&gt;data[2]);
+
+if (coil_val == MODBUS_COIL_ON_CODE)
+    state = true;
+else if (coil_val == MODBUS_COIL_OFF_CODE)
+    state = false;
+else
+    return MODBUS_EXC_ILLEGAL_DATA_VAL;
+
+err = ctx-&gt;mbs_user_cb-&gt;coil_wr(coil_addr, state);
+<span class="cm">// 响应为回显</span>
+</pre>
+
+<h3>11.5 FC06 — 写单保持寄存器</h3>
+<pre>
+uint16_t addr = sys_get_be16(&amp;rx_adu-&gt;data[0]);
+uint16_t val  = sys_get_be16(&amp;rx_adu-&gt;data[2]);
+
+err = ctx-&gt;mbs_user_cb-&gt;holding_reg_wr(addr, val);
+<span class="cm">// 响应为回显</span>
+</pre>
+
+<h3>11.6 FC08 — 诊断 <span class="badge blue">Kconfig: CONFIG_MODBUS_FC08_DIAGNOSTIC</span></h3>
+<pre>
+uint16_t subfunc = sys_get_be16(&amp;rx_adu-&gt;data[0]);
+
+switch (subfunc) {
+case MODBUS_FC08_SUBF_QUERY:          <span class="cm">// 0:  回显查询</span>
+    memcpy(tx_adu-&gt;data, rx_adu-&gt;data, rx_adu-&gt;length);
+    break;
+case MODBUS_FC08_SUBF_CLR_CTR:        <span class="cm">// 10: 清除计数器</span>
+    modbus_reset_stats(ctx);
+    break;
+case MODBUS_FC08_SUBF_BUS_MSG_CTR:    <span class="cm">// 11: 总线消息计数</span>
+    sys_put_be16(ctx-&gt;mbs_msg_ctr, &amp;tx_adu-&gt;data[2]);
+    break;
+case MODBUS_FC08_SUBF_BUS_CRC_CTR:    <span class="cm">// 12: CRC 错误计数</span>
+    sys_put_be16(ctx-&gt;mbs_crc_err_ctr, &amp;tx_adu-&gt;data[2]);
+    break;
+<span class="cm">// ... 13: 异常计数, 14: 服务器消息计数, 15: 无响应计数</span>
+}
+</pre>
+
+<h3>11.7 FC15 — 写多线圈</h3>
+<pre>
+uint16_t start_addr = sys_get_be16(&amp;rx_adu-&gt;data[0]);
+uint16_t num_coils  = sys_get_be16(&amp;rx_adu-&gt;data[2]);
+uint8_t  byte_count = rx_adu-&gt;data[4];
+
+<span class="cm">// 逐位写入</span>
+for (int i = 0; i &lt; num_coils; i++) {
+    bool state = rx_adu-&gt;data[5 + i / 8] &amp; BIT(i % 8);
+    ctx-&gt;mbs_user_cb-&gt;coil_wr(start_addr + i, state);
+}
+<span class="cm">// 响应：起始地址(2B) + 写入数量(2B)</span>
+</pre>
+
+<h3>11.8 FC16 — 写多保持寄存器</h3>
+<pre>
+uint16_t start_addr = sys_get_be16(&amp;rx_adu-&gt;data[0]);
+uint16_t num_regs   = sys_get_be16(&amp;rx_adu-&gt;data[2]);
+uint8_t  byte_count = rx_adu-&gt;data[4];
+
+<span class="cm">// 检查浮点寄存器</span>
+if (start_addr &gt;= MODBUS_FP_EXTENSIONS_ADDR) {
+    addr -= MODBUS_FP_EXTENSIONS_ADDR;
+    for (int i = 0; i &lt; num_regs; i++) {
+        float val;
+        memcpy(&amp;val, &amp;rx_adu-&gt;data[5 + i * 4], sizeof(float));
+        ctx-&gt;mbs_user_cb-&gt;holding_reg_wr_fp(addr + i, val);
+    }
+} else {
+    for (int i = 0; i &lt; num_regs; i++) {
+        uint16_t val = sys_get_be16(&amp;rx_adu-&gt;data[5 + i * 2]);
+        ctx-&gt;mbs_user_cb-&gt;holding_reg_wr(addr + i, val);
+    }
+}
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="exception"><span class="num">12</span>异常响应机制</h2>
+
+<p>当服务器无法正常处理请求时，返回异常响应：</p>
+
+<h3>异常响应格式</h3>
+<div class="diagram">
+<pre>
+┌──────────┬─────────────────┬──────────────┐
+│ 设备地址 │ 功能码 | 0x80   │ 异常代码     │
+│  1 byte  │    1 byte       │   1 byte     │
+└──────────┴─────────────────┴──────────────┘
+</pre>
+</div>
+
+<h3>异常代码定义 <span class="file-tag">modbus.h:44-67</span></h3>
+<table>
+  <tr><th>代码</th><th>常量</th><th>含义</th></tr>
+  <tr><td>1</td><td><code>MODBUS_EXC_ILLEGAL_FC</code></td><td>非法功能码</td></tr>
+  <tr><td>2</td><td><code>MODBUS_EXC_ILLEGAL_DATA_ADDR</code></td><td>非法数据地址</td></tr>
+  <tr><td>3</td><td><code>MODBUS_EXC_ILLEGAL_DATA_VAL</code></td><td>非法数据值</td></tr>
+  <tr><td>4</td><td><code>MODBUS_EXC_SERVER_DEVICE_FAILURE</code></td><td>服务器设备故障</td></tr>
+  <tr><td>5</td><td><code>MODBUS_EXC_ACK</code></td><td>确认（长操作进行中）</td></tr>
+  <tr><td>6</td><td><code>MODBUS_EXC_SERVER_DEVICE_BUSY</code></td><td>服务器忙</td></tr>
+  <tr><td>10</td><td><code>MODBUS_EXC_GW_PATH_UNAVAILABLE</code></td><td>网关路径不可用</td></tr>
+  <tr><td>11</td><td><code>MODBUS_EXC_GW_TARGET_FAILED_TO_RESP</code></td><td>网关目标设备无响应</td></tr>
+</table>
+
+<h3>异常响应构建 <span class="file-tag">modbus_server.c</span></h3>
+<pre>
+static void modbus_excep_response(struct modbus_context *ctx,
+                                  uint8_t fc, uint8_t excep_code)
+{
+    ctx-&gt;tx_adu.fc = fc | BIT(7);      <span class="cm">// 功能码最高位置 1</span>
+    ctx-&gt;tx_adu.data[0] = excep_code;
+    ctx-&gt;tx_adu.length = 1;
+}
+</pre>
+
+<div class="callout warn">
+  <strong>广播不回复异常</strong>
+  当 <code>unit_id == 0</code>（广播地址）时，即使发生异常也不发送响应。
+  这在 <code>modbus_server_handler()</code> 中通过最终判断实现。
+</div>
+
+<!-- ================================================================ -->
+<h2 id="custom-fc"><span class="num">13</span>自定义功能码注册</h2>
+
+<p>
+  Modbus 规范允许用户定义功能码（范围 65-72, 100-110）或实现规范中未支持的标准功能码。
+  Zephyr 通过运行时链表注册机制实现。
+</p>
+
+<h3>13.1 注册 API <span class="file-tag">modbus_core.c:297-317</span></h3>
+<pre>
+int modbus_register_user_fc(const int iface,
+                            struct modbus_custom_fc *custom_fc)
+{
+    <span class="cm">// 功能码 MSB 必须为 0（bit7 = 1 保留给异常响应）</span>
+    if (custom_fc-&gt;fc &amp; BIT(7))
+        return -EINVAL;
+
+    custom_fc-&gt;excep_code = MODBUS_EXC_NONE;
+    sys_slist_append(&amp;ctx-&gt;user_defined_cbs, &amp;custom_fc-&gt;node);
+}
+</pre>
+
+<h3>13.2 自定义回调类型 <span class="file-tag">modbus.h:433-437</span></h3>
+<pre>
+typedef bool (*modbus_custom_cb_t)(const int iface,
+    const struct modbus_adu *const rx_adu,
+    struct modbus_adu *const tx_adu,
+    uint8_t *const excep_code,
+    void *const user_data);
+</pre>
+
+<h3>13.3 定义宏 <span class="file-tag">modbus.h:455-461</span></h3>
+<pre>
+#define MODBUS_CUSTOM_FC_DEFINE(name, user_cb, user_fc, userdata)  \
+    static struct modbus_custom_fc modbus_cfg_##name = {           \
+        .cb = user_cb,                                             \
+        .user_data = userdata,                                     \
+        .fc = user_fc,                                             \
+        .excep_code = MODBUS_EXC_NONE,                             \
+    }
+</pre>
+
+<h3>13.4 分发处理 <span class="file-tag">modbus_server.c</span></h3>
+<p>
+  当功能码不在标准处理列表中时，<code>modbus_server_handler()</code> 调用
+  <code>modbus_user_defined_fc_handler()</code>，遍历 <code>user_defined_cbs</code> 链表，
+  匹配功能码后调用回调。
+</p>
+
+<!-- ================================================================ -->
+<h2 id="raw"><span class="num">14</span>Raw ADU 模式与 TCP 网关</h2>
+
+<p>
+  Raw ADU 模式提供不经过串行线路的原始 ADU 传输接口，
+  主要用于构建 Modbus TCP 网关。网关接收 TCP 连接上的 MBAP 帧，
+  通过 Raw 接口转发到 RTU 后端。
+</p>
+
+<h3>14.1 MBAP 头解析 <span class="file-tag">modbus_raw.c:79-101</span></h3>
+<pre>
+void modbus_raw_get_header(struct modbus_adu *adu, const uint8_t *header)
+{
+    adu-&gt;trans_id = sys_get_be16(&amp;header[0]);   <span class="cm">// 事务 ID</span>
+    adu-&gt;proto_id = sys_get_be16(&amp;header[2]);   <span class="cm">// 协议 ID (0x0000)</span>
+    adu-&gt;length = sys_get_be16(&amp;header[4]);     <span class="cm">// 后续长度</span>
+    adu-&gt;unit_id = header[6];                    <span class="cm">// 从站地址</span>
+    adu-&gt;fc = header[7];                         <span class="cm">// 功能码</span>
+    adu-&gt;length -= 2;  <span class="cm">// 减去 unit_id + fc 的长度偏差</span>
+}
+</pre>
+
+<h3>14.2 后端事务 <span class="file-tag">modbus_raw.c:122-166</span></h3>
+<p>
+  <code>modbus_raw_backend_txn()</code> 是 TCP 网关的核心函数，
+  将 TCP 侧的 ADU 通过 RTU 客户端接口发送到串行总线。
+</p>
+<pre>
+int modbus_raw_backend_txn(const int iface, struct modbus_adu *adu)
+{
+    ctx = modbus_get_context(iface);
+
+    <span class="cm">// 仅支持配置为客户端的 RTU/ASCII 串行接口</span>
+    if (ctx-&gt;client == false ||
+        (ctx-&gt;mode != MODBUS_MODE_RTU &amp;&amp; ctx-&gt;mode != MODBUS_MODE_ASCII))
+        return -ENOTSUP;
+
+    <span class="cm">// 将 ADU 复制到 RTU 接口的 TX 缓冲区</span>
+    memcpy(&amp;ctx-&gt;tx_adu, adu, sizeof(struct modbus_adu));
+    err = modbus_tx_wait_rx_adu(ctx);    <span class="cm">// 发送并等待 RTU 响应</span>
+
+    if (err == 0) {
+        <span class="cm">// 保留 TCP 侧的 trans_id 和 proto_id</span>
+        uint16_t trans_id = adu-&gt;trans_id;
+        uint16_t proto_id = adu-&gt;proto_id;
+        memcpy(adu, &amp;ctx-&gt;rx_adu, sizeof(struct modbus_adu));
+        adu-&gt;trans_id = trans_id;
+        adu-&gt;proto_id = proto_id;
+    } else {
+        <span class="cm">// 目标设备无响应</span>
+        modbus_set_exception(adu, MODBUS_EXC_GW_TARGET_FAILED_TO_RESP);
+    }
+}
+</pre>
+
+<div class="diagram">
+<pre>
+  Modbus TCP 客户端
+        │
+        ▼
+  ┌─────────────┐    TCP Socket    ┌──────────────────┐
+  │ TCP Gateway │ ◄──────────────► │   BSD Socket     │
+  │ (main loop) │   MBAP + PDU    │   accept/recv    │
+  └──────┬──────┘                  └──────────────────┘
+         │ modbus_raw_backend_txn()
+         ▼
+  ┌─────────────┐    RTU Serial    ┌──────────────────┐
+  │ RTU Client  │ ◄──────────────► │   RS-485 Bus     │
+  │ (backend)   │   RTU ADU+CRC   │   Modbus Servers  │
+  └─────────────┘                  └──────────────────┘
+</pre>
+</div>
+
+<h3>14.3 RX ADU 提交 <span class="file-tag">modbus_raw.c:51-77</span></h3>
+<p>
+  外部（如 TCP 线程）调用 <code>modbus_raw_submit_rx()</code> 将接收到的 ADU
+  注入到 RAW 接口的处理流程：
+</p>
+<pre>
+int modbus_raw_submit_rx(const int iface, const struct modbus_adu *adu)
+{
+    ctx = modbus_get_context(iface);
+    <span class="cm">// 复制 ADU 到 rx_adu</span>
+    memcpy(ctx-&gt;rx_adu.data, adu-&gt;data, ...);
+    <span class="cm">// 提交到工作队列</span>
+    k_work_submit(&amp;ctx-&gt;server_work);
+}
+</pre>
+
+<!-- ================================================================ -->
+<h2 id="kconfig"><span class="num">15</span>Kconfig 配置选项</h2>
+
+<p>所有配置选项位于 <code>subsys/modbus/Kconfig</code>：</p>
+
+<table>
+  <tr>
+    <th>选项</th>
+    <th>类型</th>
+    <th>默认值</th>
+    <th>说明</th>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS</code></td>
+    <td>bool</td>
+    <td>n</td>
+    <td>总开关，启用 Modbus 支持。自动选择 CRC 模块</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_BUFFER_SIZE</code></td>
+    <td>int</td>
+    <td>256</td>
+    <td>ADU 缓冲区大小 (64-256)。影响 RAM 占用</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_ROLE_CLIENT</code></td>
+    <td>bool</td>
+    <td>-</td>
+    <td>仅客户端支持</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_ROLE_SERVER</code></td>
+    <td>bool</td>
+    <td>-</td>
+    <td>仅服务器支持</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_ROLE_CLIENT_SERVER</code></td>
+    <td>bool</td>
+    <td>y (默认)</td>
+    <td>同时支持客户端和服务器</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_SERIAL</code></td>
+    <td>bool</td>
+    <td>y</td>
+    <td>串行线路支持。依赖 SERIAL + 设备树节点</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_SERIAL_ASYNC_API</code></td>
+    <td>bool</td>
+    <td>n</td>
+    <td>使用 UART Async API 代替 IRQ 模式</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_ASCII_MODE</code></td>
+    <td>bool</td>
+    <td>n</td>
+    <td>启用 ASCII 传输模式</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_RAW_ADU</code></td>
+    <td>bool</td>
+    <td>n</td>
+    <td>启用 Raw ADU 支持（TCP 网关必需）</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_NUMOF_RAW_ADU</code></td>
+    <td>int</td>
+    <td>1</td>
+    <td>Raw ADU 实例数 (1-4)</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_FP_EXTENSIONS</code></td>
+    <td>bool</td>
+    <td>y</td>
+    <td>浮点扩展支持（地址 &ge; 5000）</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_FC08_DIAGNOSTIC</code></td>
+    <td>bool</td>
+    <td>y</td>
+    <td>FC08 诊断支持。依赖 MODBUS_SERVER</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_NONCOMPLIANT_SERIAL_MODE</code></td>
+    <td>bool</td>
+    <td>n</td>
+    <td>允许非标准停止位/校验位设置</td>
+  </tr>
+  <tr>
+    <td><code>CONFIG_MODBUS_LOG_LEVEL</code></td>
+    <td>int</td>
+    <td>-</td>
+    <td>日志级别（通过 logging subsystem 模板）</td>
+  </tr>
+</table>
+
+<div class="callout info">
+  <strong>隐式依赖</strong>
+  <code>CONFIG_MODBUS_SERIAL</code> 隐含启用 <code>UART_USE_RUNTIME_CONFIGURE</code>（通过 <code>imply</code>），
+  确保运行时可以配置 UART 参数（波特率、校验位等）。
+</div>
+
+<h3>典型配置组合</h3>
+<table>
+  <tr><th>场景</th><th>最小配置</th></tr>
+  <tr>
+    <td>RTU 服务器</td>
+    <td>
+      <code>MODBUS=y</code>, <code>MODBUS_ROLE_SERVER=y</code>,<br>
+      <code>MODBUS_SERIAL=y</code>, <code>SERIAL=y</code>
+    </td>
+  </tr>
+  <tr>
+    <td>RTU 客户端</td>
+    <td>
+      <code>MODBUS=y</code>, <code>MODBUS_ROLE_CLIENT=y</code>,<br>
+      <code>MODBUS_SERIAL=y</code>, <code>SERIAL=y</code>
+    </td>
+  </tr>
+  <tr>
+    <td>TCP 网关</td>
+    <td>
+      <code>MODBUS=y</code>, <code>MODBUS_ROLE_CLIENT_SERVER=y</code>,<br>
+      <code>MODBUS_SERIAL=y</code>, <code>MODBUS_RAW_ADU=y</code>,<br>
+      <code>NETWORKING=y</code>
+    </td>
+  </tr>
+</table>
+
+<!-- ================================================================ -->
+<h2 id="samples"><span class="num">16</span>示例应用分析</h2>
+
+<h3>16.1 RTU 客户端示例 <span class="file-tag">samples/subsys/modbus/rtu_client/</span></h3>
+<p>演示客户端 API 的典型使用流程：</p>
+<pre>
+<span class="cm">// 1. 获取接口索引</span>
+const char iface_name[] = {DEVICE_DT_NAME(MODBUS_NODE)};
+client_iface = modbus_iface_get_by_name(iface_name);
+
+<span class="cm">// 2. 初始化为客户端</span>
+const struct modbus_iface_param client_param = {
+    .mode = MODBUS_MODE_RTU,
+    .rx_timeout = 50000,        <span class="cm">// 50ms 响应超时</span>
+    .serial = {
+        .baud = 19200,
+        .parity = UART_CFG_PARITY_NONE,
+    },
+};
+modbus_init_client(client_iface, client_param);
+
+<span class="cm">// 3. 写保持寄存器 (FC16)</span>
+modbus_write_holding_regs(client_iface, node, 0, holding_reg, 8);
+
+<span class="cm">// 4. 读保持寄存器 (FC03)</span>
+modbus_read_holding_regs(client_iface, node, 0, holding_reg, 8);
+
+<span class="cm">// 5. 循环读写线圈 (FC01, FC05, FC15)</span>
+while (true) {
+    modbus_read_coils(client_iface, node, 0, coil, coil_qty);
+    modbus_write_coil(client_iface, node, addr, true);
+    modbus_write_coils(client_iface, node, 0, coil, coil_qty);
+    k_msleep(250);
+}
+</pre>
+
+<h3>16.2 RTU 服务器示例 <span class="file-tag">samples/subsys/modbus/rtu_server/</span></h3>
+<p>演示服务器用户回调实现：</p>
+<pre>
+<span class="cm">// 用户回调实现</span>
+static int coil_rd(uint16_t addr, bool *state) {
+    *state = coils_state &amp; BIT(addr);
+    return 0;
+}
+
+static int coil_wr(uint16_t addr, bool state) {
+    if (state) coils_state |= BIT(addr);
+    else       coils_state &amp;= ~BIT(addr);
+    gpio_pin_set(led_dev[addr].port, led_dev[addr].pin, (int)state);
+    return 0;
+}
+
+static int holding_reg_rd(uint16_t addr, uint16_t *reg) {
+    *reg = holding_reg[addr];
+    return 0;
+}
+
+static int holding_reg_wr(uint16_t addr, uint16_t reg) {
+    holding_reg[addr] = reg;
+    return 0;
+}
+
+<span class="cm">// 注册回调并初始化</span>
+static struct modbus_user_callbacks mbs_cbs = {
+    .coil_rd = coil_rd,
+    .coil_wr = coil_wr,
+    .holding_reg_rd = holding_reg_rd,
+    .holding_reg_wr = holding_reg_wr,
+};
+
+const static struct modbus_iface_param server_param = {
+    .mode = MODBUS_MODE_RTU,
+    .server = {
+        .user_cb = &amp;mbs_cbs,
+        .unit_id = 1,
+    },
+    .serial = {
+        .baud = 19200,
+        .parity = UART_CFG_PARITY_NONE,
+    },
+};
+
+modbus_init_server(iface, server_param);
+</pre>
+
+<h3>16.3 TCP 网关示例 <span class="file-tag">samples/subsys/modbus/tcp_gateway/</span></h3>
+<p>展示如何使用 Raw ADU 接口构建 Modbus TCP → RTU 网关：</p>
+<pre>
+<span class="cm">// 初始化 RTU 后端为客户端</span>
+backend = modbus_iface_get_by_name(bend_name);
+modbus_init_client(backend, backend_param);
+
+<span class="cm">// TCP 服务器主循环</span>
+serv = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+bind(serv, ..., MODBUS_TCP_PORT);  <span class="cm">// 端口 502</span>
+listen(serv, 5);
+
+while (1) {
+    client = accept(serv, ...);
+
+    do {
+        <span class="cm">// 1. 接收 MBAP 头 (7 字节) + 功能码 (1 字节)</span>
+        recv(client, header, MODBUS_MBAP_AND_FC_LENGTH, MSG_WAITALL);
+        modbus_raw_get_header(&amp;tmp_adu, header);
+
+        <span class="cm">// 2. 接收数据域</span>
+        recv(client, tmp_adu.data, data_len, MSG_WAITALL);
+
+        <span class="cm">// 3. 通过 RTU 后端转发</span>
+        modbus_raw_backend_txn(backend, &amp;tmp_adu);
+
+        <span class="cm">// 4. 回复 TCP 客户端</span>
+        modbus_raw_put_header(&amp;tmp_adu, header);
+        send(client, header, sizeof(header), 0);
+        send(client, tmp_adu.data, tmp_adu.length, 0);
+    } while (!rc);
+
+    close(client);
+}
+</pre>
+
+<div class="callout tip">
+  <strong>TCP 网关架构</strong>
+  TCP 网关应用需要两个接口：
+  <ul>
+    <li><b>前端接口</b>：标准 BSD Socket 监听 TCP 502 端口</li>
+    <li><b>后端接口</b>：配置为 RTU 客户端的 Modbus 串行接口</li>
+  </ul>
+  <code>modbus_raw_backend_txn()</code> 是连接两者的桥梁。
+</div>
+
+<!-- ================================================================ -->
+<h2 id="architecture"><span class="num">17</span>架构总结与数据流</h2>
+
+<h3>17.1 完整架构分层图</h3>
+<div class="diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                      应用层 (Application)                    │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────┐│
+│  │  Client API     │  │  Server Callbacks│  │  TCP Gateway ││
+│  │  FC01-FC16      │  │  coil_rd/wr     │  │  raw_backend ││
+│  │  FP extensions  │  │  holding_rd/wr  │  │  MBAP parse  ││
+│  └────────┬────────┘  └────────┬────────┘  └──────┬───────┘│
+├───────────┼────────────────────┼──────────────────┼─────────┤
+│           │    Modbus 核心 (modbus_core.c)         │         │
+│  ┌────────▼────────────────────▼──────────────────▼────────┐│
+│  │  modbus_context  │  mb_ctx_tbl[]  │  server_work        ││
+│  │  iface_lock      │  rx/tx_adu     │  client_wait_sem    ││
+│  └────────┬────────────────────┬──────────────────┬────────┘│
+│           │                    │                  │          │
+│  ┌────────▼────────┐  ┌───────▼────────┐  ┌──────▼────────┐│
+│  │ modbus_client.c │  │modbus_server.c │  │ modbus_raw.c  ││
+│  │ (FC request     │  │ (FC dispatch   │  │ (MBAP header  ││
+│  │  builder)       │  │  + response)   │  │  + backend)   ││
+│  └────────┬────────┘  └───────┬────────┘  └───────────────┘│
+├───────────┼───────────────────┼─────────────────────────────┤
+│           │    串行线路层 (modbus_serial.c)                  │
+│  ┌────────▼───────────────────▼──────────────────────────┐  │
+│  │  RTU: CRC16 + binary framing                          │  │
+│  │  ASCII: LRC + hex encoding (':', CR+LF)               │  │
+│  │  IRQ mode / Async mode                                │  │
+│  │  RS-485 DE/nRE GPIO control                           │  │
+│  └────────┬──────────────────────────────────────────────┘  │
+├───────────┼─────────────────────────────────────────────────┤
+│           │    Zephyr 驱动层                                 │
+│  ┌────────▼──────────────────────────────────────────────┐  │
+│  │  UART Driver  │  GPIO Driver  │  CRC16 HW/SW          │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<h3>17.2 客户端请求-响应时序</h3>
+<div class="diagram">
+<pre>
+Client Thread                   Modbus Core                    UART/RS-485
+─────────────                   ───────────                    ───────────
+modbus_read_holding_regs()
+  │
+  ├─ mutex_lock()
+  ├─ build tx_adu
+  ├─ tx_wait_rx_adu()
+  │    ├─ sem_reset()
+  │    ├─ tx_adu()
+  │    │    └─ serial_tx_adu()
+  │    │         └─ DE=1, TX data, DE=0
+  │    │                              ──── RTU Request ────►
+  │    │                                                   Server
+  │    │                              ◄── RTU Response ────
+  │    ├─ sem_take(timeout)  ◄── rx_handler()
+  │    │                         └─ sem_give()
+  │    └─ return rx_adu_err
+  ├─ parse response
+  ├─ mutex_unlock()
+  └─ return 0
+</pre>
+</div>
+
+<h3>17.3 服务器处理时序</h3>
+<div class="diagram">
+<pre>
+UART RX                         Modbus Core                    User Callbacks
+────────                        ───────────                    ──────────────
+RTU frame received
+  │
+  ├─ [IRQ] rtu_timer expire
+  │   └─ k_work_submit(server_work)
+  │
+  ├─ rx_handler()
+  │    ├─ serial_rx_disable()
+  │    ├─ serial_rx_adu() ─── CRC check
+  │    ├─ server_handler()
+  │    │    ├─ unit_id match?
+  │    │    ├─ FC dispatch
+  │    │    │    └─ fc03_holding_reg_read()
+  │    │    │         └─ user_cb->holding_reg_rd()  ────►  return reg value
+  │    │    └─ build tx_adu
+  │    ├─ tx_adu()
+  │    │    └─ serial_tx_adu() ── DE=1, TX, DE=0
+  │    └─ serial_rx_enable()  ─── ready for next frame
+  │
+  └─ waiting for next frame...
+</pre>
+</div>
+
+<h3>17.4 关键设计特征</h3>
+
+<table>
+  <tr><th>设计特征</th><th>实现方式</th><th>优势</th></tr>
+  <tr>
+    <td>零动态分配</td>
+    <td>设备树宏生成静态上下文表</td>
+    <td>无堆碎片风险，确定性内存</td>
+  </tr>
+  <tr>
+    <td>线程安全</td>
+    <td>k_mutex 保护客户端接口</td>
+    <td>多线程安全共享接口</td>
+  </tr>
+  <tr>
+    <td>模式隔离</td>
+    <td>RTU/ASCII/RAW 三模式独立函数集</td>
+    <td>编译期裁剪，无运行时开销</td>
+  </tr>
+  <tr>
+    <td>双 UART API</td>
+    <td>IRQ + Async 编译期选择</td>
+    <td>适配不同硬件能力</td>
+  </tr>
+  <tr>
+    <td>回调驱动</td>
+    <td>服务器通过 user_callbacks 代理数据访问</td>
+    <td>应用层完全控制数据模型</td>
+  </tr>
+  <tr>
+    <td>TCP 网关就绪</td>
+    <td>Raw ADU + MBAP 头处理</td>
+    <td>零拷贝 TCP-RTU 桥接</td>
+  </tr>
+  <tr>
+    <td>可扩展功能码</td>
+    <td>sys_slist 运行时注册</td>
+    <td>无需修改子系统源码</td>
+  </tr>
+</table>
+
+<div class="callout info">
+  <strong>代码规模</strong>
+  <ul>
+    <li><code>modbus_core.c</code>: 410 行 — 核心调度</li>
+    <li><code>modbus_serial.c</code>: 714 行 — 串行线路（最大文件）</li>
+    <li><code>modbus_client.c</code>: 644 行 — 客户端 API</li>
+    <li><code>modbus_server.c</code>: 1044 行 — 服务器处理（最大文件）</li>
+    <li><code>modbus_raw.c</code>: 184 行 — Raw ADU</li>
+    <li><code>modbus_internal.h</code>: 256 行 — 内部接口</li>
+    <li><code>modbus.h</code>: 640 行 — 公共 API</li>
+    <li><b>总计: ~3892 行</b>（不含空行和注释）</li>
+  </ul>
+</div>
+
+</div>
+
+<div class="footer">
+  <p>Zephyr RTOS Modbus 子系统源码深度剖析 &bull; 基于 <code>subsys/modbus/</code> 源码分析</p>
+  <p>生成日期：2026-05-14</p>
+</div>
+
+</body>
+</html>
