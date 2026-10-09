@@ -1,0 +1,21 @@
+description: |
+  Probe-side SPI NOR flash.
+
+  Place the node under a SPI controller and point `cs-gpios` at the flash
+  chip-select. The driver reads JEDEC ID / SFDP to discover geometry and
+  exposes read/erase/program via CMSIS-DAP vendor commands.
+
+compatible: "daplink,spi-flash"
+
+properties:
+  reg:
+    type: int
+    required: true
+    description: Chip-select index on the SPI bus.
+  spi-max-frequency:
+    type: int
+    required: true
+    description: Maximum SPI clock in Hz.
+  jedec-id:
+    type: int
+    description: Optional expected JEDEC ID (0x00BBCC where BB=vendor, CC=type).

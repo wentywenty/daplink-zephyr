@@ -18,8 +18,15 @@ extern const struct gpio_dt_spec swdio_spec;
 extern const struct gpio_dt_spec swdio_in_spec;
 extern const struct gpio_dt_spec nreset_spec;
 
+/* JTAG-only pins (TCK/TMS reuse swclk/swdio) */
+extern const struct gpio_dt_spec tdi_spec;
+extern const struct gpio_dt_spec tdo_spec;
+
 /* Indicates whether a separate SWDIO input pin is configured */
 extern bool swdio_in_present;
+
+/* Indicates whether JTAG (TDI/TDO) pins are configured */
+extern bool jtag_present;
 
 /**
  * Initialize SWD/JTAG GPIO pins from device tree configuration.

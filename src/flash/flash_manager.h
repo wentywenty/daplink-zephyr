@@ -38,6 +38,25 @@ int flash_manager_init(const target_cfg_t *target);
 int flash_manager_write(uint32_t addr, const uint8_t *data, uint32_t size);
 
 /**
+ * Verify a block of data already programmed to target flash.
+ * Reads the target back over SWD and compares byte-for-byte.
+ *
+ * @param addr  Target flash address
+ * @param data  Expected data
+ * @param size  Number of bytes
+ * @return 0 on match, -EIO on mismatch or read failure
+ */
+int flash_manager_verify(uint32_t addr, const uint8_t *data, uint32_t size);
+
+/**
+ * Read/write a target option-byte register via the detected target's native
+ * backend. idx 0 = primary register, 1 = secondary. Returns -ENOTSUP if the
+ * target has no option-byte support.
+ */
+int flash_manager_option_read(uint32_t idx, uint32_t *val);
+int flash_manager_option_write(uint32_t idx, uint32_t val);
+
+/**
  * Finalize flash programming.
  * Calls UnInit on the flash algorithm and resets target.
  *

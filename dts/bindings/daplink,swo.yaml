@@ -1,0 +1,15 @@
+description: |
+  CMSIS-DAP SWO capture source.
+
+  Points at the UART whose RX pin is connected to the target's SWO (single
+  wire output / ITM-as-UART) line. The DAPLink application configures this
+  UART to the requested SWO baud rate and streams the captured bytes through
+  the CMSIS-DAP ID_DAP_SWO_* commands.
+
+compatible: "daplink,swo"
+
+properties:
+  uart:
+    type: phandle
+    required: true
+    description: UART device used to capture the target SWO stream.

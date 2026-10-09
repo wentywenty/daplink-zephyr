@@ -1,0 +1,41 @@
+/*
+ * Shared MCUboot flash partition layout (512 KB STM32F407VE).
+ *
+ * Aligned to the F4 sector map (4x16K + 1x64K + 3x128K = sectors 0..7):
+ *   sector 0-4 (0x00000-0x1FFFF, 128K) -> mcuboot bootloader
+ *   sector 5   (0x20000-0x3FFFF, 128K) -> slot0 (primary)
+ *   sector 6   (0x40000-0x5FFFF, 128K) -> slot1 (secondary)
+ *   sector 7   (0x60000-0x7FFFF, 128K) -> scratch (>= largest sector)
+ *
+ * Included by boards/bmd_app_sysbuild.overlay and
+ * boards/bmd_mcuboot_partitions.overlay.
+ */
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 0x00020000>;
+			read-only;
+		};
+
+		slot0_partition: partition@20000 {
+			label = "image-0";
+			reg = <0x00020000 0x00020000>;
+		};
+
+		slot1_partition: partition@40000 {
+			label = "image-1";
+			reg = <0x00040000 0x00020000>;
+		};
+
+		scratch_partition: partition@60000 {
+			label = "image-scratch";
+			reg = <0x00060000 0x00020000>;
+		};
+	};
+};

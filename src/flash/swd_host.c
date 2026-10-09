@@ -34,6 +34,7 @@ LOG_MODULE_REGISTER(swd_host);
 #define CSW_MSTRDBG       (1U << 29)
 #define CSW_DBGSTAT       (1U << 31)
 #define CSW_SADDRINC      (1U << 4)
+#define CSW_SIZE16        (1U << 0)
 #define CSW_SIZE32        (2U << 0)
 
 #define CSW_VALUE         (CSW_RESERVED | CSW_MSTRDBG | CSW_HPROT | \
@@ -113,44 +114,93 @@ static bool swd_write_ap(uint32_t addr, uint32_t val)
 	return swd_transfer(SWD_REG_AP(addr) | SWD_REG_W, &val);
 }
 
+/*
+ * ADIv5 switch sequences (ARM IHI 0031C).
+ * These mirror the Black Magic Debug adiv5_swd.c sequences and are sent
+ * through the CMSIS-DAP SWJ_Sequence primitive.
+ */
+#define ADIV5_JTAG_TO_SWD_SELECT_SEQUENCE 0xE79EU
+#define ADIV5_JTAG_TO_DORMANT_SEQUENCE0   0x1FU
+#define ADIV5_JTAG_TO_DORMANT_SEQUENCE1   0x33BBBBBAU
+#define ADIV5_JTAG_TO_DORMANT_SEQUENCE2   0xFFU
+#define ADIV5_SELECTION_ALERT_SEQUENCE_0  0x6209F392U
+#define ADIV5_SELECTION_ALERT_SEQUENCE_1  0x86852D95U
+#define ADIV5_SELECTION_ALERT_SEQUENCE_2  0xE3DDAFE9U
+#define ADIV5_SELECTION_ALERT_SEQUENCE_3  0x19BC0EA2U
+#define ADIV5_ACTIVATION_CODE_ARM_SWD_DP  0x1AU
+
+/* Send 'cycles' bits (LSB first) of value on SWDIOTMS via SWJ_Sequence. */
+static void swd_seq_out(uint32_t value, uint32_t cycles)
+{
+	uint8_t buf[4] = {
+		(uint8_t)value,
+		(uint8_t)(value >> 8),
+		(uint8_t)(value >> 16),
+		(uint8_t)(value >> 24),
+	};
+
+	SWJ_Sequence(cycles, buf);
+}
+
+/*
+ * Line reset: >=50 SWCLKTCK cycles with SWDIOTMS high, then idle cycles.
+ * Uses 60 high cycles and 4 idle cycles for robustness (some STM32 parts
+ * require more than the 51/2 minimum).
+ */
+static void swd_line_reset(bool idle)
+{
+	swd_seq_out(0xFFFFFFFFU, 32U);
+	swd_seq_out(0x0FFFFFFFU, idle ? 32U : 28U);
+}
+
+/* Deprecated JTAG-to-SWD select sequence. */
+static void swd_jtag_to_swd(void)
+{
+	swd_line_reset(false);
+	swd_seq_out(ADIV5_JTAG_TO_SWD_SELECT_SEQUENCE, 16U);
+	swd_line_reset(true);
+}
+
+/*
+ * Switch out of dormant state into SWD (ADIv5 §5.3.4). Enables operation on
+ * multi-drop SWD buses where the DP may be left dormant after a prior
+ * session, or where JTAG is the default protocol.
+ */
+static void swd_dormant_to_swd(void)
+{
+	swd_line_reset(false);
+	/* JTAG -> dormant (in case the DP is both JTAG and SWD) */
+	swd_seq_out(ADIV5_JTAG_TO_DORMANT_SEQUENCE0, 5U);
+	swd_seq_out(ADIV5_JTAG_TO_DORMANT_SEQUENCE1, 31U);
+	swd_seq_out(ADIV5_JTAG_TO_DORMANT_SEQUENCE2, 8U);
+	/* 128-bit selection alert */
+	swd_seq_out(ADIV5_SELECTION_ALERT_SEQUENCE_0, 32U);
+	swd_seq_out(ADIV5_SELECTION_ALERT_SEQUENCE_1, 32U);
+	swd_seq_out(ADIV5_SELECTION_ALERT_SEQUENCE_2, 32U);
+	swd_seq_out(ADIV5_SELECTION_ALERT_SEQUENCE_3, 32U);
+	/* 4 cycles low + 8-bit activation code */
+	swd_seq_out(ADIV5_ACTIVATION_CODE_ARM_SWD_DP << 4U, 12U);
+	/* Target is in protocol error state; reset to a known state */
+	swd_line_reset(true);
+}
+
 int swd_init_debug(void)
 {
 	uint32_t val;
 	uint32_t retries = 100;
 
-	/*
-	 * SWJ-DP Switch from JTAG to SWD (if applicable).
-	 * Send the JTAG-to-SWD switching sequence: >50 cycles of 1,
-	 * then 0xE79E (16 bits), then >50 cycles of 1.
-	 */
-	{
-		uint8_t swj_seq[18];
-		int idx = 0;
-
-		/* >50 cycles of 1 (7 bytes of 0xFF) */
-		for (int i = 0; i < 7; i++) {
-			swj_seq[idx++] = 0xFF;
-		}
-
-		/* 0xE79E, LSB first: 0x9E, 0xE7 */
-		swj_seq[idx++] = 0x9E;
-		swj_seq[idx++] = 0xE7;
-
-		/* >50 cycles of 1 (7 bytes of 0xFF) */
-		for (int i = 0; i < 7; i++) {
-			swj_seq[idx++] = 0xFF;
-		}
-
-		/* Send the first 51+16+51 = 118+ bits */
-		SWJ_Sequence(51, swj_seq);
-		SWJ_Sequence(16, &swj_seq[7]);
-		SWJ_Sequence(51, &swj_seq[9]);
-	}
+	/* First try the (deprecated but widely supported) JTAG->SWD select. */
+	swd_jtag_to_swd();
 
 	/* Read DP IDCODE to verify connection */
 	if (!swd_read_dp(DP_IDCODE, &val)) {
-		LOG_ERR("SWD: failed to read DP IDCODE");
-		return -EIO;
+		/* Fall back to the multi-drop-capable dormant->SWD sequence */
+		LOG_WRN("SWD: JTAG->SWD failed, trying dormant->SWD");
+		swd_dormant_to_swd();
+		if (!swd_read_dp(DP_IDCODE, &val)) {
+			LOG_ERR("SWD: failed to read DP IDCODE");
+			return -EIO;
+		}
 	}
 	LOG_INF("SWD: DP IDCODE = 0x%08X", val);
 
@@ -238,6 +288,44 @@ bool swd_write_word(uint32_t addr, uint32_t val)
 	}
 	/* Write data to AP DRW */
 	return swd_write_ap(0x0C, val);
+}
+
+bool swd_write_halfword(uint32_t addr, uint16_t val)
+{
+	if (!swd_write_ap(0x00, CSW_VALUE | CSW_SIZE16)) {
+		return false;
+	}
+	if (!swd_write_ap(0x04, addr)) {
+		return false;
+	}
+	return swd_write_ap(0x0C, (uint32_t)val);
+}
+
+bool swd_read_halfword(uint32_t addr, uint16_t *val)
+{
+	uint32_t data;
+
+	if (!swd_write_ap(0x00, CSW_VALUE | CSW_SIZE16)) {
+		return false;
+	}
+	if (!swd_write_ap(0x04, addr)) {
+		return false;
+	}
+	if (!swd_read_ap(0x0C, &data)) {
+		return false;
+	}
+	*val = (uint16_t)data;
+	return true;
+}
+
+bool swd_read_ap_reg(uint32_t addr, uint32_t *val)
+{
+	return swd_read_ap(addr, val);
+}
+
+bool swd_write_ap_reg(uint32_t addr, uint32_t val)
+{
+	return swd_write_ap(addr, val);
 }
 
 bool swd_read_memory(uint32_t addr, uint8_t *data, uint32_t size)
@@ -398,6 +486,7 @@ bool swd_flash_syscall_exec(const program_syscall_t *sys,
 	 *   R1  = arg2
 	 *   R9  = static base (R SB)
 	 *   R13 = stack pointer (R SP)
+	 *   R14 = link register (return address = algorithm's BKPT)
 	 *   R15 = entry point (PC)
 	 *   xPSR = 0x01000000 (Thumb bit set)
 	 */
@@ -413,6 +502,13 @@ bool swd_flash_syscall_exec(const program_syscall_t *sys,
 		return false;
 	}
 	if (!swd_write_core_register(13, sys->stack_pointer)) { /* R13 = SP */
+		return false;
+	}
+	/*
+	 * R14 (LR) must point at the BKPT return target embedded in the
+	 * algorithm blob so that the routine's final `bx lr` halts the core.
+	 */
+	if (!swd_write_core_register(14, sys->breakpoint)) { /* R14 = LR = BKPT */
 		return false;
 	}
 	if (!swd_write_core_register(15, entry)) {     /* R15 = PC */

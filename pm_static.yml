@@ -1,0 +1,38 @@
+# Black Magic Debug - Zephyr (daplink-zephyr) static flash layout.
+#
+# 512 KB STM32F407VE MCUboot swap-scratch layout, aligned to the F4 sector
+# map (4x16K + 1x64K + 3x128K = sectors 0..7):
+#   0x00000 - 0x20000  mcuboot bootloader (128 KB)
+#   0x20000 - 0x40000  slot0             (128 KB)
+#   0x40000 - 0x60000  slot1             (128 KB)
+#   0x60000 - 0x80000  scratch           (128 KB)
+#
+# Kept in sync with boards/bmd_partitions.dtsi.
+
+mcuboot:
+  address: 0x0
+  size: 0x20000
+  region: flash_primary
+
+mcuboot_pad:
+  address: 0x20000
+  size: 0x200
+
+mcuboot_primary:
+  address: 0x20000
+  size: 0x20000
+  span: [mcuboot_pad, app]
+
+mcuboot_primary_app:
+  address: 0x20200
+  size: 0x1fe00
+  span: [app]
+
+mcuboot_secondary:
+  address: 0x40000
+  size: 0x20000
+  span: [mcuboot_secondary]
+
+mcuboot_scratch:
+  address: 0x60000
+  size: 0x20000

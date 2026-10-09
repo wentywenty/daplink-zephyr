@@ -63,6 +63,34 @@ typedef struct {
 /* Region flags */
 #define REGION_IS_DEFAULT  0x01U
 
+struct target_cfg_s;
+typedef struct target_cfg_s target_cfg_t;
+
+/*
+ * Optional native (register-level) flash programming backend.
+ *
+ * When a target provides one of these, the flash manager programs the device
+ * directly through the SoC's flash controller via SWD memory access, instead
+ * of downloading and executing a RAM algorithm blob. This mirrors the Black
+ * Magic Debug approach and avoids the fragile blob/breakpoint handshake.
+ *
+ * All callbacks return 0 on success or a negative errno on failure.
+ */
+typedef struct flash_native_ops {
+	/* Optional: prepare the target before flash (e.g. freeze watchdogs) */
+	int (*prepare)(const target_cfg_t *cfg);
+	/* Erase the sector containing addr */
+	int (*erase_sector)(const target_cfg_t *cfg, uint32_t addr);
+	/* Program size bytes (already erased) starting at addr */
+	int (*program)(const target_cfg_t *cfg, uint32_t addr, const uint8_t *data, uint32_t size);
+	/* Erase the whole device */
+	int (*mass_erase)(const target_cfg_t *cfg);
+	/* Read an option-byte register (idx 0 = primary, 1 = secondary) */
+	int (*option_read)(const target_cfg_t *cfg, uint32_t idx, uint32_t *val);
+	/* Program an option-byte register */
+	int (*option_write)(const target_cfg_t *cfg, uint32_t idx, uint32_t val);
+} flash_native_ops_t;
+
 /*
  * Flash region descriptor.
  */
@@ -85,14 +113,22 @@ typedef struct {
  * Target chip configuration.
  * Describes a target MCU for flash programming.
  */
-typedef struct {
+struct target_cfg_s {
 	const sector_info_t *sectors_info;
 	uint32_t sector_info_length;
 	flash_region_t flash_regions[TARGET_MAX_FLASH_REGIONS];
 	ram_region_t ram_regions[TARGET_MAX_RAM_REGIONS];
 	const char *target_vendor;
 	const char *target_part_number;
-} target_cfg_t;
+	/* Optional native (register-level) programming backend */
+	const flash_native_ops_t *native_ops;
+};
+
+/* Native backends provided by the target drivers below */
+extern const flash_native_ops_t flash_native_stm32f1;
+extern const flash_native_ops_t flash_native_stm32f4;
+extern const flash_native_ops_t flash_native_stm32l4;
+extern const flash_native_ops_t flash_native_nrf52;
 
 /* Target state constants */
 enum {

@@ -1,0 +1,6 @@
+/*
+ * MCUboot bootloader image partition layout.
+ * Applied to the MCUboot image only (see sysbuild.cmake / build command).
+ */
+
+#include "bmd_partitions.dtsi"

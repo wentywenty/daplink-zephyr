@@ -85,6 +85,7 @@ CMSIS-DAP 是 ARM 定义的调试协议，通过 USB HID 传输 DAP 命令。
 
 - 接收 HID 报文，按 Command ID 分发处理
 - 支持的命令：DAP_Info、DAP_HostStatus、DAP_Connect、DAP_Disconnect、DAP_Transfer、DAP_TransferBlock、DAP_WriteABORT、DAP_Delay、DAP_ResetTarget、DAP_SWJ_Pins、DAP_SWJ_Clock、DAP_SWJ_Sequence
+- JTAG 命令（`DAP_JTAG != 0` 时）：DAP_JTAG_Sequence、DAP_JTAG_Configure、DAP_JTAG_IDCODE
 - 每个 DAP 命令处理函数返回响应报文长度
 - 从 ARM CMSIS_5 官方仓库移植，保持协议兼容
 
@@ -108,10 +109,20 @@ DIO ─<Start><APnDP><RnW><Addr><Parity><Turn><Data...>
 
 时序由 `dap_delay.c` 的精确延时保证，默认约 1MHz SWD 时钟。
 
+#### JTAG_DP.c — JTAG 协议物理层（可选）
+
+与 SW_DP.c 并列，实现 CMSIS-DAP 的 JTAG 传输（TCK/TMS/TDI/TDO bit-bang）：
+
+- **JTAG_Sequence()**：任意 JTAG 位序列（对应 DAP_JTAG_Sequence），TMS 电平固定、逐位移位 TDI 并捕获 TDO。
+- **JTAG_IR()**：走 TAP 状态机（Select-DR → Select-IR → Capture-IR → Shift-IR → … → Update-IR），按 `DAP_Data.jtag_dev` 的 `ir_before/ir_length/ir_after` 处理多器件链（含 bypass）。
+- **JTAG_Transfer()**：DPACC/APACC 读/写（含 ACK 生成、DAP_TRANSFER_RnW 数据阶段、idle_cycles）。
+- **JTAG_ReadIDCode() / JTAG_WriteAbort()**：DP IDCODE 读 / ABORT 写。
+
+`TCK/TMS 复用 SWCLK/SWDIO`，仅新增 `TDI`(输出) / `TDO`(输入) 两个引脚。整个 JTAG 传输由 `CONFIG_DAPLINK_JTAG` 门控（默认开；64KB Flash 小板建议关闭以省 ~9KB）。
+
 #### DAP_config.h — Zephyr 适配层
 
 将 CMSIS-DAP 核心的 GPIO 操作映射到 Zephyr API：
-
 | CMSIS-DAP 宏 | Zephyr 实现 |
 |--------------|-------------|
 | `PIN_SWCLK_TCK_SET()` | `gpio_pin_set(swclk, 1)` |

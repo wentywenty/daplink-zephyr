@@ -97,4 +97,5 @@ const target_cfg_t target_stm32f4 = {
 	},
 	.target_vendor     = "STMicroelectronics",
 	.target_part_number = "STM32F407VETx",
+	.native_ops        = &flash_native_stm32f4,
 };

@@ -33,11 +33,11 @@ extern "C" {
 /// Indicate that SWD is available.
 #define DAP_SWD                  1
 
-/// Indicate that JTAG is available.
-#define DAP_JTAG                 0
+/// Indicate that JTAG is available (gated by CONFIG_DAPLINK_JTAG).
+#define DAP_JTAG                 IS_ENABLED(CONFIG_DAPLINK_JTAG)
 
 /// Maximum JTAG device count.
-#define DAP_JTAG_DEV_CNT         0
+#define DAP_JTAG_DEV_CNT         4
 
 /// Default communication port (1=SWD, 2=JTAG).
 #define DAP_DEFAULT_PORT         1
@@ -51,9 +51,14 @@ extern "C" {
 /// Maximum Package Count.
 #define DAP_PACKET_COUNT         1
 
-/// SWO UART not available.
+/// SWO UART capture (optional; see CONFIG_DAPLINK_SWO and the daplink,swo DT node).
+#if CONFIG_DAPLINK_SWO
+#define SWO_UART                 1
+#define SWO_BUFFER_SIZE          64
+#else
 #define SWO_UART                 0
 #define SWO_BUFFER_SIZE          0
+#endif
 #define SWO_MANCHESTER           0
 
 /// DAP UART not available (Phase 1).
@@ -161,7 +166,12 @@ __STATIC_FORCEINLINE void PIN_nRESET_OUT(uint32_t bit)
 	if (nreset_spec.port == NULL) {
 		return;
 	}
-	gpio_pin_set_dt(&nreset_spec, bit);
+	/*
+	 * Use raw logic levels so that this stays consistent with PIN_nRESET_IN()
+	 * and the DAP protocol convention (1 = nRESET high / deasserted). With an
+	 * active-low wired-OR reset this drives the pin low when bit == 0.
+	 */
+	gpio_pin_set_raw(nreset_spec.port, nreset_spec.pin, bit);
 }
 
 //**************************************************************************************************
@@ -176,7 +186,11 @@ __STATIC_FORCEINLINE void PORT_SWD_SETUP(void)
 #if (DAP_JTAG != 0)
 __STATIC_FORCEINLINE void PORT_JTAG_SETUP(void)
 {
-	/* Not implemented for Phase 1 */
+	/* TDI (output) / TDO (input) configured by dap_gpio_init();
+	 * TCK/TMS reuse SWCLK/SWDIO pins. Ensure TDI idles high. */
+	if (jtag_present && tdi_spec.port != NULL) {
+		gpio_pin_set_raw(tdi_spec.port, tdi_spec.pin, 1);
+	}
 }
 #endif
 
@@ -192,6 +206,14 @@ __STATIC_FORCEINLINE void PORT_OFF(void)
 	if (nreset_spec.port != NULL) {
 		gpio_pin_configure(nreset_spec.port, nreset_spec.pin, GPIO_INPUT);
 	}
+	if (jtag_present) {
+		if (tdi_spec.port != NULL) {
+			gpio_pin_configure(tdi_spec.port, tdi_spec.pin, GPIO_INPUT);
+		}
+		if (tdo_spec.port != NULL) {
+			gpio_pin_configure(tdo_spec.port, tdo_spec.pin, GPIO_INPUT);
+		}
+	}
 }
 
 //**************************************************************************************************
@@ -201,11 +223,26 @@ __STATIC_FORCEINLINE void LED_CONNECTED_OUT(uint32_t bit) { (void)bit; }
 __STATIC_FORCEINLINE void LED_RUNNING_OUT(uint32_t bit) { (void)bit; }
 
 //**************************************************************************************************
-/** JTAG pin stubs (DAP_JTAG = 0, but SWJ_Sequence references some) */
+/** JTAG pin I/O (TCK/TMS reuse SWCLK/SWDIO) */
 
-#define PIN_TDI_OUT(bit)   ((void)(bit))
-#define PIN_TDI_IN()       0
-#define PIN_TDO_IN()       0
+/// TDI: set output bit (no-op if this board has no JTAG pins).
+__STATIC_FORCEINLINE void PIN_TDI_OUT(uint32_t bit)
+{
+	if (jtag_present) {
+		gpio_pin_set_raw(tdi_spec.port, tdi_spec.pin, (bit & 1U));
+	}
+}
+
+/// TDO: read input bit (returns 0 if this board has no JTAG pins).
+__STATIC_FORCEINLINE uint32_t PIN_TDO_IN(void)
+{
+	if (jtag_present && tdo_spec.port != NULL) {
+		return gpio_pin_get_raw(tdo_spec.port, tdo_spec.pin);
+	}
+	return 0U;
+}
+
+#define PIN_TDI_IN()       PIN_TDO_IN()
 #define PIN_nTRST_OUT(bit) ((void)(bit))
 #define PIN_nTRST_IN()     0
 

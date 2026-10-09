@@ -15,11 +15,15 @@
 		/* SWD data pin - bidirectional */
 		swdio-gpios = <&gpioB 14 0>;
 
-		/* Optional: separate SWDIO input pin */
-		/* swdio-in-gpios = <&gpioB 12 0>; */
+		/* Optional: separate SWDIO input pin (avoid PB12, used as TDO below) */
+		/* swdio-in-gpios = <&gpioB 11 0>; */
 
 		/* Target reset pin - open drain with pull-up */
 		nreset-gpios = <&gpioB 0 (GPIO_OPEN_DRAIN | GPIO_ACTIVE_LOW)>;
+
+		/* JTAG (optional): TCK=PB13, TMS=PB14 reuse SWCLK/SWDIO */
+		tdi-gpios = <&gpioB 15 0>;
+		tdo-gpios = <&gpioB 12 0>;
 	};
 };
 

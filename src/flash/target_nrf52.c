@@ -74,4 +74,5 @@ const target_cfg_t target_nrf52832 = {
 	},
 	.target_vendor     = "NordicSemiconductor",
 	.target_part_number = "nRF52832_xxAA",
+	.native_ops        = &flash_native_nrf52,
 };

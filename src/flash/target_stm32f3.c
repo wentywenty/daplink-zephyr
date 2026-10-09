@@ -74,4 +74,5 @@ const target_cfg_t target_stm32f3 = {
 	},
 	.target_vendor     = "STMicroelectronics",
 	.target_part_number = "STM32F334R8Tx",
+	.native_ops        = &flash_native_stm32f1,
 };

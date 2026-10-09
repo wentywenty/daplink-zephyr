@@ -26,3 +26,13 @@ properties:
     type: phandle-array
     required: false
     description: Target nRESET pin (open-drain)
+
+  tdi-gpios:
+    type: phandle-array
+    required: false
+    description: JTAG TDI output pin (optional; enables JTAG mode)
+
+  tdo-gpios:
+    type: phandle-array
+    required: false
+    description: JTAG TDO input pin (optional; enables JTAG mode)

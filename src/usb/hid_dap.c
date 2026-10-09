@@ -18,8 +18,13 @@
 #include "hid_dap.h"
 #include "DAP_config.h"
 #include "DAP.h"
+#include "swd_host.h"
 
 LOG_MODULE_REGISTER(hid_dap, LOG_LEVEL_INF);
+
+/* Serializes SWD bus access between the HID DAP and flash paths. Defined
+ * here because the HID path is always built, even when MSC is disabled. */
+K_MUTEX_DEFINE(swd_bus_mutex);
 
 static const uint8_t hid_report_desc[] = {
 	0x06, 0x00, 0xFF,    /* Usage Page (Vendor Defined 0xFF00) */
@@ -54,28 +59,30 @@ static bool hid_ready;
 static const struct device *hid_dev;
 static struct k_work dap_work;
 
-/* Mutex to protect DAP bus access */
-K_MUTEX_DEFINE(dap_bus_mutex);
-
 static void dap_work_handler(struct k_work *work)
 {
 	struct dap_msg msg;
 	uint32_t result;
 
 	while (k_msgq_get(&dap_cmd_msgq, &msg, K_NO_WAIT) == 0) {
-		k_mutex_lock(&dap_bus_mutex, K_FOREVER);
+		k_mutex_lock(&swd_bus_mutex, K_FOREVER);
 
 		memset(dap_response, 0, DAP_PACKET_SIZE);
 		result = DAP_ExecuteCommand(msg.request, dap_response);
 
 		uint16_t resp_len = (uint16_t)(result & 0xFFFF);
 
+		/* Never exceed the shared report buffer size */
+		if (resp_len > DAP_PACKET_SIZE) {
+			resp_len = DAP_PACKET_SIZE;
+		}
+
 		LOG_DBG("DAP cmd 0x%02X: req=%u resp=%u",
 			msg.request[0],
 			(uint16_t)(result >> 16),
 			resp_len);
 
-		k_mutex_unlock(&dap_bus_mutex);
+		k_mutex_unlock(&swd_bus_mutex);
 
 		if (hid_ready) {
 			int ret = hid_device_submit_report(hid_dev,

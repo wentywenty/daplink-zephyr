@@ -9,6 +9,7 @@
 | 功能 | 接口 | 说明 |
 |------|------|------|
 | CMSIS-DAP v2 | USB HID | 兼容 Keil/OpenOCD/pyOCD |
+| SWD + JTAG | USB HID | 传输可选 SWD 或 JTAG（`CONFIG_DAPLINK_JTAG`，默认开；JTAG 需 TDI/TDO 引脚） |
 | 串口透传 | CDC ACM | 调试目标 UART 输出 |
 | 拖放烧写 | MSC | 拖入 .hex/.bin 自动烧写目标（可选，需 ~32KB RAM） |
 | 自动检测 | — | SWD IDCODE 识别目标芯片 |
@@ -21,11 +22,17 @@
 |------|----------|-------|------|--------|
 | STM32F0 | STM32F072RB | 128 KB | 1 KB | 0x445 |
 | STM32F1 | STM32F103xB | 128 KB | 1 KB | 0x414 |
+| STM32F2 | STM32F207ZG | 1 MB | 16 KB | 0x411 |
 | STM32F3 | STM32F334R8 | 64 KB | 2 KB | 0x438 |
 | STM32F4 | STM32F407VE | 512 KB | 变长 | 0x413 |
+| STM32F4 | STM32F429ZI | 2 MB | 变长 | 0x419 |
 | STM32F7 | STM32F746ZG | 1 MB | 32 KB | 0x449 |
-| STM32L0 | STM32L082CZ | 192 KB | 128 B | 0x407 |
-| STM32L4 | STM32L476RG | 1 MB | 2 KB | 0x439 |
+| STM32L0 | STM32L082CZ | 192 KB | 128 B | 0x407/0x417 |
+| STM32L1 | STM32L151CC | 256 KB | 256 B | 0x416 |
+| STM32L4 | STM32L476RG | 1 MB | 2 KB | 0x415 |
+
+DEV_ID 表覆盖更多型号（F0/F1/F2/F3/F4/F7/L0/L4 各代常见 DEV_ID）。
+新增目标用 `tools/port_family.py` 从 DAPLink `source/family/` 一键移植。
 
 STM32F401/411/429 共用 F4 算法，DEV_ID 分别为 0x423/0x431/0x419。
 
@@ -58,9 +65,22 @@ STM32F401/411/429 共用 F4 算法，DEV_ID 分别为 0x423/0x431/0x419。
 
 ```
 探针                      目标板
-─────────────────        ──────────
+─────────        ──────────
 PB13 (SWCLK)  ─────────> SWCLK
 PB14 (SWDIO)  ─<───────> SWDIO
+PB0  (nRESET) ─────────> nRST
+GND           ─────────> GND
+```
+
+JTAG 连接（可选，TCK/TMS 复用 SWCLK/SWDIO；需在板级 overlay 配 `tdi/tdo-gpios`）：
+
+```
+探针                      目标板
+─────────        ──────────
+PB13 (TCK)    ─────────> TCK
+PB14 (TMS)    ─────────> TMS
+PB15 (TDI)    ─────────> TDI
+PB12 (TDO)    ─<──────── TDO
 PB0  (nRESET) ─────────> nRST
 GND           ─────────> GND
 ```
@@ -158,8 +178,9 @@ src/
 ├── dap/                # CMSIS-DAP 核心
 │   ├── DAP.c           # DAP 命令处理（从 ARM 官方移植）
 │   ├── DAP.h
-│   ├── DAP_config.h    # Zephyr GPIO 适配层
-│   └── SW_DP.c         # SWD 协议底层 bit-bang
+│   ├── DAP_config.h    # Zephyr GPIO 适配层（含 JTAG TDI/TDO 宏）
+│   ├── SW_DP.c         # SWD 协议底层 bit-bang
+│   └── JTAG_DP.c       # JTAG 协议底层 bit-bang（TAP/IR/DR，可选）
 ├── hal/                # 硬件抽象层
 │   ├── dap_gpio.c      # SWD GPIO 初始化和控制
 │   └── dap_delay.c     # 精确延时（SWD 时序）
@@ -214,6 +235,15 @@ RAM 主要被 VFS 磁盘镜像占用（32 KB）。
 | 2 | CDC ACM 串口透传 | Done |
 | 3 | MSC USB 大容量存储 | Done |
 | 4 | 拖放烧写 + 多目标自动检测 | Done |
+| 5 | JTAG 传输（SWD + JTAG，Kconfig 门控） | Done |
+
+## blackmagic 能力移植
+
+在保持 CMSIS-DAP 探针定位（不引入 GDB server）的前提下，移植了 blackmagic 的若干能力：
+STM32/nRF 内部 flash 直写寄存器后端、烧写校验、目标识别增强、SWD dormant 回退、
+**RISC-V** 调试支持、**SWO**（UART + ITM 解码）、**RTT**、Option bytes、**MCUboot OTA/DFU**、
+探针侧 **SPI NOR flash**（JEDEC/SFDP）。详见
+[docs/blackmagic-integration.md](docs/blackmagic-integration.md)。
 
 ## 参考项目
 

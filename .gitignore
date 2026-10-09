@@ -1,2 +1,26 @@
-build
+# Zephyr / west build output
+/build/
+/build-*/
+/build_*/
+
+# Build artifacts
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+*.su
+*.d
+
+# CMake / tooling output
 compile_commands.json
+cscope.out
+tags
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+*~

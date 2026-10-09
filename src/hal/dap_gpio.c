@@ -32,13 +32,24 @@ const struct gpio_dt_spec nreset_spec =
 	GPIO_DT_SPEC_GET_OR(DAPLINK_GPIO_NODE, nreset_gpios, {0});
 bool swdio_in_present = HAS_SWDIO_IN;
 
+#define HAS_JTAG (DT_NODE_HAS_PROP(DAPLINK_GPIO_NODE, tdi_gpios) && \
+		  DT_NODE_HAS_PROP(DAPLINK_GPIO_NODE, tdo_gpios))
+const struct gpio_dt_spec tdi_spec =
+	GPIO_DT_SPEC_GET_OR(DAPLINK_GPIO_NODE, tdi_gpios, {0});
+const struct gpio_dt_spec tdo_spec =
+	GPIO_DT_SPEC_GET_OR(DAPLINK_GPIO_NODE, tdo_gpios, {0});
+bool jtag_present = HAS_JTAG;
+
 #else
 /* Fallback: no device tree node */
 const struct gpio_dt_spec swclk_spec = {0};
 const struct gpio_dt_spec swdio_spec = {0};
 const struct gpio_dt_spec swdio_in_spec = {0};
 const struct gpio_dt_spec nreset_spec = {0};
+const struct gpio_dt_spec tdi_spec = {0};
+const struct gpio_dt_spec tdo_spec = {0};
 bool swdio_in_present = false;
+bool jtag_present = false;
 #endif
 
 int dap_gpio_init(void)
@@ -99,6 +110,32 @@ int dap_gpio_init(void)
 				LOG_ERR("Failed to configure nRESET: %d", ret);
 				return ret;
 			}
+		}
+	}
+
+	/* JTAG TDI: push-pull output, idle high */
+	if (jtag_present && tdi_spec.port != NULL) {
+		if (!gpio_is_ready_dt(&tdi_spec)) {
+			LOG_ERR("TDI GPIO not ready");
+			return -ENODEV;
+		}
+		ret = gpio_pin_configure_dt(&tdi_spec, GPIO_OUTPUT_HIGH);
+		if (ret != 0) {
+			LOG_ERR("Failed to configure TDI: %d", ret);
+			return ret;
+		}
+	}
+
+	/* JTAG TDO: input */
+	if (jtag_present && tdo_spec.port != NULL) {
+		if (!gpio_is_ready_dt(&tdo_spec)) {
+			LOG_ERR("TDO GPIO not ready");
+			return -ENODEV;
+		}
+		ret = gpio_pin_configure_dt(&tdo_spec, GPIO_INPUT);
+		if (ret != 0) {
+			LOG_ERR("Failed to configure TDO: %d", ret);
+			return ret;
 		}
 	}
 

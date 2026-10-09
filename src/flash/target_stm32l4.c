@@ -81,4 +81,5 @@ const target_cfg_t target_stm32l4 = {
 	},
 	.target_vendor     = "STMicroelectronics",
 	.target_part_number = "STM32L476RGTx",
+	.native_ops        = &flash_native_stm32l4,
 };

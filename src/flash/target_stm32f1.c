@@ -77,4 +77,5 @@ const target_cfg_t target_stm32f1 = {
 	},
 	.target_vendor     = "STMicroelectronics",
 	.target_part_number = "STM32F103xB",
+	.native_ops        = &flash_native_stm32f1,
 };

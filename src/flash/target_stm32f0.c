@@ -78,4 +78,5 @@ const target_cfg_t target_stm32f0 = {
 	},
 	.target_vendor     = "STMicroelectronics",
 	.target_part_number = "STM32F072RBTx",
+	.native_ops        = &flash_native_stm32f1,
 };

@@ -21,6 +21,7 @@
 #include "flash_manager.h"
 #include "intelhex.h"
 #include "target_detect.h"
+#include "swd_host.h"
 
 #define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
 #include <zephyr/logging/log.h>
@@ -315,13 +316,21 @@ static int hex_data_cb(uint32_t addr, const uint8_t *data,
 		fctx->has_error = true;
 		return rc;
 	}
+
+	rc = flash_manager_verify(addr, data, size);
+	if (rc != 0) {
+		LOG_ERR("Flash verify failed at 0x%08X: %d", addr, rc);
+		fctx->has_error = true;
+		return rc;
+	}
 	return 0;
 }
 
 /*
  * Execute flash programming from the received file data.
+ * Caller must hold swd_bus_mutex.
  */
-static void do_flash_program(void)
+static void do_flash_program_locked(void)
 {
 	g_file_state = FILE_STATE_FLASHING;
 
@@ -367,10 +376,25 @@ static void do_flash_program(void)
 			return;
 		}
 	} else {
-		/* Binary file: write directly at flash base */
-		rc = flash_manager_write(0x08000000, file_data, g_file_size);
+		/* Binary file: write directly at the target's flash base address */
+		uint32_t base = 0;
+		for (uint32_t i = 0; i < TARGET_MAX_FLASH_REGIONS; i++) {
+			if (target->flash_regions[i].flash_algo != NULL) {
+				base = target->flash_regions[i].start;
+				break;
+			}
+		}
+		rc = flash_manager_write(base, file_data, g_file_size);
 		if (rc != 0) {
 			LOG_ERR("Binary flash write failed: %d", rc);
+			flash_manager_finish();
+			g_file_state = FILE_STATE_ERROR;
+			return;
+		}
+
+		rc = flash_manager_verify(base, file_data, g_file_size);
+		if (rc != 0) {
+			LOG_ERR("Binary flash verify failed: %d", rc);
 			flash_manager_finish();
 			g_file_state = FILE_STATE_ERROR;
 			return;
@@ -384,12 +408,24 @@ static void do_flash_program(void)
 }
 
 /*
+ * Execute flash programming while holding the shared SWD bus lock so the
+ * HID CMSIS-DAP path and drag-and-drop flashing cannot interleave SWD
+ * transactions.
+ */
+static void do_flash_program(void)
+{
+	k_mutex_lock(&swd_bus_mutex, K_FOREVER);
+	do_flash_program_locked();
+	k_mutex_unlock(&swd_bus_mutex);
+}
+
+/*
  * Update the virtual filesystem to show result status.
  */
 static void update_status_file(void)
 {
 	uint8_t *root = &disk_image[ROOT_DIR_START * SECTOR_SIZE];
-	uint8_t *entry = &root[2]; /* Use entry 2 for status file */
+	uint8_t *entry = &root[2 * 32]; /* Use directory entry 2 for status file */
 	static const char success_name[] = "SUCCESS TXT";
 	static const char fail_name[]    = "FAIL    TXT";
 	static const char success_msg[]  = "Flash programming successful!\r\n";

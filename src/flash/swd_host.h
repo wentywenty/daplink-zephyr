@@ -9,11 +9,19 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <zephyr/kernel.h>
 #include "flash_blob.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/*
+ * Global mutex serializing all access to the shared SWD bus. Both the HID
+ * CMSIS-DAP command path and the drag-and-drop flash path must hold this
+ * while driving SWD/JTAG pins or the shared DAP_Daten state.
+ */
+extern struct k_mutex swd_bus_mutex;
 
 /**
  * Initialize SWD debug connection to target.
@@ -36,6 +44,23 @@ bool swd_read_word(uint32_t addr, uint32_t *val);
  * Write a 32-bit word to target memory.
  */
 bool swd_write_word(uint32_t addr, uint32_t val);
+
+/**
+ * Write a 16-bit halfword to target memory (used for STM32F1 flash).
+ */
+bool swd_write_halfword(uint32_t addr, uint16_t val);
+
+/**
+ * Read a 16-bit halfword from target memory.
+ */
+bool swd_read_halfword(uint32_t addr, uint16_t *val);
+
+/**
+ * Raw AP register access (with AP read-buffer flush), for DTMs that expose
+ * registers rather than memory-mapped access (e.g. the RISC-V gateway DTM).
+ */
+bool swd_read_ap_reg(uint32_t addr, uint32_t *val);
+bool swd_write_ap_reg(uint32_t addr, uint32_t val);
 
 /**
  * Read a block of memory from target.

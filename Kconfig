@@ -15,3 +15,115 @@ config DAPLINK_MSC_FLASH
 
 	  When enabled, you should also enable CONFIG_USBD_MSC_CLASS and
 	  CONFIG_DISK_ACCESS in your board configuration.
+
+config DAPLINK_JTAG
+	bool "Enable JTAG transport (in addition to SWD)"
+	default y
+	help
+	  Compile the JTAG DP I/O (JTAG_DP.c) into the CMSIS-DAP core and
+	  advertise JTAG in DAP_Capabilities. Adds roughly 9KB of Flash.
+	  Disable this on resource-constrained probes (e.g. 64KB Flash
+	  Blue Pill) to keep SWD-only operation.
+
+config DAPLINK_TARGET_STM32
+	bool "Enable STM32 target family support"
+	default y
+	depends on DAPLINK_MSC_FLASH
+	help
+	  STM32 target detection (DBGMCU DEV_ID) and register-level flash
+	  drivers (F0/F1/F2/F3/F4/F429/L4). Disable to save Flash on small
+	  probes that only need a single family.
+
+config DAPLINK_TARGET_MISC
+	bool "Enable nRF / LPC target support"
+	default y
+	depends on DAPLINK_MSC_FLASH
+	help
+	  Nordic nRF52832 and NXP LPC1768 targets (detected by DP IDCODE;
+	  nRF uses the register-level NVMC flash driver).
+
+config DAPLINK_RTT
+	bool "Enable SEGGER RTT over CMSIS-DAP vendor commands"
+	default n
+	depends on DAPLINK_MSC_FLASH
+	help
+	  Discover the target's SEGGER RTT control block over SWD and expose
+	  its ring buffers through CMSIS-DAP vendor commands (0x80). Requires
+	  a host-side client that speaks this vendor protocol (pyOCD plugin
+	  or a small script); there is no standard RTT-over-CMSIS-DAP yet.
+
+config DAPLINK_OPTION_BYTES
+	bool "Enable STM32 option-byte access over CMSIS-DAP vendor commands"
+	default n
+	depends on DAPLINK_MSC_FLASH
+	help
+	  Read and program STM32 option bytes (RDP/WRP/BOR etc.) through
+	  CMSIS-DAP vendor command 0x80 sub-commands 0x10/0x11. Currently
+	  implemented for the STM32F4 flash controller. Programming option
+	  bytes triggers a system reset (OBL_LAUNCH).
+
+config DAPLINK_VENDOR_REBOOT
+	bool "Enable probe reboot vendor command"
+	default n
+	select REBOOT
+	help
+	  Expose CMSIS-DAP vendor command 0x80 sub-command 0x20 which reboots
+	  the probe. Combined with an MCUboot bootloader (see sysbuild.conf)
+	  this lets a host trigger a firmware update / boot into the new image.
+
+config DAPLINK_RISCV
+	bool "Enable experimental RISC-V JTAG detection"
+	default n
+	depends on DAPLINK_JTAG && DAPLINK_MSC_FLASH
+	help
+	  Reset the JTAG TAP and read the chain IDCODE as a first step towards
+	  RISC-V support. This is DETECTION ONLY: it does not provide DTM/DMI
+	  access, register/memory access or flash programming yet.
+
+config DAPLINK_SPI_FLASH
+	bool "Enable probe-side SPI NOR flash programming"
+	default n
+	depends on SPI
+	help
+	  Drive a SPI NOR flash connected to the probe (not the target) via a
+	  Zephyr SPI controller. JEDEC ID / SFDP are used to discover geometry;
+	  read/erase/program are exposed through CMSIS-DAP vendor commands
+	  (0x80 sub-commands 0x30..0x34). Requires a devicetree node:
+
+	    &spi1 {
+	        spiflash: spiflash@0 {
+	            compatible = "daplink,spi-flash";
+	            reg = <0>;
+	            spi-max-frequency = <8000000>;
+	        };
+	    };
+
+config DAPLINK_SWO_ITM
+	bool "Enable SWO ITM software decoding"
+	default n
+	depends on DAPLINK_SWO
+	help
+	  Decode ITM/SWIT packets from the captured SWO UART stream and expose
+	  the decoded channel data through CMSIS-DAP vendor commands (0x80
+	  sub-commands 0x40..0x42). Manchester-encoded SWO capture is NOT
+	  implemented (it requires timer input-capture hardware on the SWO pin).
+
+config DAPLINK_SWO
+	bool "Enable CMSIS-DAP SWO (UART) capture"
+	default n
+	depends on SERIAL
+	help
+	  Implement the CMSIS-DAP ID_DAP_SWO_* commands backed by a Zephyr
+	  UART capturing the target's SWO / ITM-as-UART output. This lets
+	  pyOCD/OpenOCD stream target printf over the same CMSIS-DAP link.
+
+	  Requires a devicetree node:
+
+	    swo0: swo0 {
+	        compatible = "daplink,swo";
+	        uart = <&usart1>;   /* UART whose RX pin is wired to target SWO */
+	    };
+
+	  Off by default because it needs a dedicated probe RX pin wired to
+	  the target's SWO output.
+

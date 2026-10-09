@@ -1,0 +1,13 @@
+/*
+ * Application-side MCUboot partition layout.
+ * Applied to the main image only when building with --sysbuild (see
+ * sysbuild.cmake). Places the application in slot0.
+ */
+
+#include "bmd_partitions.dtsi"
+
+/ {
+	chosen {
+		zephyr,code-partition = &slot0_partition;
+	};
+};
